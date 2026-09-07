@@ -99,3 +99,31 @@ async def test_no_raw_pii_in_telemetry(demo_workspace: Path) -> None:
         assert phone not in log_text
     for name in df["resp_name"].astype(str):
         assert name not in log_text
+
+
+async def test_cleaner_produces_clean_copy(demo_workspace: Path, df: pd.DataFrame) -> None:
+    import dataclasses
+
+    cfg = dataclasses.replace(load_config(demo_workspace), max_budget_usd=4.0)
+    async with AnalyticsSession(cfg) as session:
+        async for _ in session.ask(
+            "Почисти датасет beneficiaries: дубли, невозможные значения, даты, "
+            "разнобой категорий. Сырой файл не трогай."
+        ):
+            pass
+
+    clean_path = cfg.data_dir / "beneficiaries_clean.xlsx"
+    assert clean_path.exists(), "clean copy not created"
+    clean = pd.read_excel(clean_path)
+    assert len(clean) == df["_uuid"].nunique()          # 3000: duplicates dropped
+    assert clean["_uuid"].is_unique
+    assert not (clean["head_age"] == 999).any()          # impossible ages gone
+    assert "resp_phone" in clean.columns                 # PII columns preserved
+
+    reports = list(cfg.reports_dir.glob("*cleaning_report*.md"))
+    assert reports, "cleaning report not created"
+    report_text = reports[0].read_text(encoding="utf-8")
+    assert str(len(df) - df["_uuid"].nunique()) in report_text  # 30 duplicates reported
+
+    raw_again = pd.read_excel(demo_workspace / "data" / "beneficiaries.xlsx")
+    pd.testing.assert_frame_equal(raw_again, df)         # raw byte-identical

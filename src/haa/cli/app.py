@@ -67,6 +67,13 @@ async def _repl(cfg: HaaConfig, console: Console) -> None:
             except BudgetExceeded as exc:
                 console.print(f"[red]{exc}[/red]")
                 break
+            except KeyboardInterrupt:
+                console.print("[dim]interrupted[/dim]")
+                break
+            except Exception as exc:  # noqa: BLE001 - REPL must survive transient API/network errors
+                console.print(f"[red]Error during analysis: {exc}[/red]")
+                console.print("[yellow]Session saved; retry or /quit.[/yellow]")
+                continue
     console.print(f"Session log: {session.telemetry.path}")
     console.print(session.telemetry.summary())
 

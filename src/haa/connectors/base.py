@@ -46,10 +46,19 @@ def ensure_row_ids(df: pd.DataFrame) -> pd.DataFrame:
     for col in ID_CANDIDATES:
         if col in df.columns and df[col].notna().all() and df[col].astype(str).is_unique:
             return df
-    hashes = df.astype(str).apply(
-        lambda row: hashlib.sha1("\x1f".join(row.values).encode()).hexdigest()[:16],
-        axis=1,
-    ) if len(df) else pd.Series([], dtype=str)
+    stringified = df.astype(str)
+    stringified.columns = stringified.columns.astype(str)
+    ordered = sorted(stringified.columns)
+    hashes = (
+        stringified.apply(
+            lambda row: hashlib.sha1(
+                "\x1f".join(f"{col}\x1e{row[col]}" for col in ordered).encode()
+            ).hexdigest()[:16],
+            axis=1,
+        )
+        if len(df)
+        else pd.Series([], dtype=str)
+    )
     occurrence = hashes.groupby(hashes).cumcount() if len(df) else hashes
     out = df.copy()
     out["_haa_row_id"] = [

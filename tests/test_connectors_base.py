@@ -49,6 +49,12 @@ def test_row_ids_deterministic() -> None:
     assert a == b
 
 
+def test_row_ids_independent_of_column_order() -> None:
+    a = ensure_row_ids(pd.DataFrame({"v": [1], "w": ["x"]}))["_haa_row_id"].iloc[0]
+    b = ensure_row_ids(pd.DataFrame({"w": ["x"], "v": [1]}))["_haa_row_id"].iloc[0]
+    assert a == b
+
+
 def test_rows_to_dataframe_empty() -> None:
     assert rows_to_dataframe([]).empty
 

@@ -1,4 +1,6 @@
 import json
+import os
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -120,7 +122,10 @@ def test_profile_cache_invalidated_on_mtime(demo_workspace: Path, tmp_path: Path
     tb = _toolbox(ws)
     first = tb.profile_dataset("beneficiaries")
     df = pd.read_excel(ws / "data" / "beneficiaries.xlsx").head(10)
-    df.to_excel(ws / "data" / "beneficiaries.xlsx", index=False)
+    target = ws / "data" / "beneficiaries.xlsx"
+    df.to_excel(target, index=False)
+    bumped = time.time() + 5
+    os.utime(target, (bumped, bumped))
     second = tb.profile_dataset("beneficiaries")
     assert '"rows": 10' in second and second != first
 
@@ -140,3 +145,12 @@ def test_no_pii_access_event_without_flag(demo_workspace: Path) -> None:
     tele = SessionTelemetry(cfg.logs_dir / "nopii.jsonl")
     DataToolbox(cfg, tele).run_analysis("print(1)")
     assert "pii_access" not in tele.path.read_text(encoding="utf-8")
+
+
+def test_pii_access_logged_with_spaces(demo_workspace: Path) -> None:
+    cfg = load_config(demo_workspace)
+    tele = SessionTelemetry(cfg.logs_dir / "pii2.jsonl")
+    DataToolbox(cfg, tele).run_analysis(
+        'df = load_dataset("beneficiaries", include_pii = True)\nprint(len(df))'
+    )
+    assert '"kind": "pii_access"' in tele.path.read_text(encoding="utf-8")

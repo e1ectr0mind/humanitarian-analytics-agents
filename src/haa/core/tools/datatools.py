@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 
 import pandas as pd
 
@@ -37,6 +38,7 @@ _FAILURE_STOP_MESSAGE = (
     "report honestly to the user what was attempted and why it failed. "
     "Do not invent results."
 )
+_PII_ACCESS_RE = re.compile(r"include_pii\s*=\s*True")
 
 
 class DataToolbox:
@@ -104,7 +106,7 @@ class DataToolbox:
         # Profile every known dataset once so the PII map covers load_dataset calls.
         for ds in discover_datasets(self.config.data_dir):
             self._ensure_profiled(ds)
-        if "include_pii=True" in code:
+        if _PII_ACCESS_RE.search(code):
             self.telemetry.log(
                 "pii_access", note="load_dataset(include_pii=True) in submitted code"
             )

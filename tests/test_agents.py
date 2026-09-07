@@ -26,11 +26,11 @@ def test_analyst_model_configurable(tmp_path: Path) -> None:
 
 def test_registry(tmp_path: Path) -> None:
     agents = build_agents(_cfg(tmp_path))
-    assert set(agents) == {"analyst"}
+    assert set(agents) == {"analyst", "cleaner"}
 
 
 def test_prompts_carry_discipline() -> None:
     for needle in ("never fabricate", "SADD", "load_dataset", "aggregat"):
         assert needle.lower() in ANALYST_PROMPT.lower()
-    for needle in ("delegate", "analyst", "honest"):
+    for needle in ("delegate", "analyst", "honest", "cleaner", "pull"):
         assert needle.lower() in ORCHESTRATOR_PROMPT.lower()

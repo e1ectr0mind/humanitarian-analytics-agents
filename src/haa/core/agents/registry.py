@@ -4,7 +4,8 @@ from claude_agent_sdk import AgentDefinition
 
 from haa.config import HaaConfig
 from haa.core.agents.analyst import build_analyst
+from haa.core.agents.cleaner import build_cleaner
 
 
 def build_agents(config: HaaConfig) -> dict[str, AgentDefinition]:
-    return {"analyst": build_analyst(config)}
+    return {"analyst": build_analyst(config), "cleaner": build_cleaner(config)}

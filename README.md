@@ -41,6 +41,23 @@ is a deliberate exception — project documentation (logframes, proposals) is
 Try: *"How many unique households per oblast? Disaggregate by sex of head."*
 or *"How are we progressing toward the Indicator 1.1 target?"*
 
+## Connecting live sources (KoboToolbox / Ona)
+
+    uv run haa connect kobo        # asks for server URL and API token once;
+                                   # the token goes into the OS credential store
+    uv run haa pull kobo --form "Household Survey"
+
+Or just ask in the chat: *"Pull fresh submissions of Household Survey from Kobo"*.
+Pulled files land in `workspace/data/` and are cleaned/analyzed like any local
+export. Only a summary (form name, row count) ever reaches the model.
+
+## Cleaning a dataset
+
+Ask: *"Clean the beneficiaries dataset."* The cleaner agent produces
+`beneficiaries_clean.xlsx` plus `workspace/reports/beneficiaries_cleaning_report.md`
+(duplicates, impossible values, category normalization — with before/after
+numbers). The raw file is never modified.
+
 ## Architecture
 
     CLI (rich REPL)
@@ -71,7 +88,7 @@ tests on every push.
 
 ## Roadmap
 
-This is subproject 1 of 6: core + analyst agent. Next: source connectors
-(KoboToolbox, ona.io, SharePoint), a data-cleaning agent, indicator registry +
-XLSForm designer, reporting (5W/MEAL), a Power BI engineer agent (via MCP),
-and a web UI. Design docs live in `docs/superpowers/specs/`.
+This is subproject 1 of 6: core + analyst agent + connectors/cleaner. Next:
+indicator registry + XLSForm designer, SharePoint connector, reporting
+(5W/MEAL), a Power BI engineer agent (via MCP), and a web UI. Design docs live
+in `docs/superpowers/specs/`.

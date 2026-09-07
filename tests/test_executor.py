@@ -100,3 +100,15 @@ def test_sandbox_boundary_check(demo_workspace: Path) -> None:
     res = run_code(code, _cfg(demo_workspace), {})
     assert res.returncode != 0, f"Expected error, got stdout={res.stdout!r}, stderr={res.stderr!r}"
     assert "evil data" not in res.stdout
+
+
+def test_load_dataset_include_pii(demo_workspace: Path) -> None:
+    code = 'df = load_dataset("beneficiaries", include_pii=True)\nprint(sorted(df.columns))'
+    res = run_code(code, _cfg(demo_workspace), PII)
+    assert res.returncode == 0, res.stderr
+    assert "resp_phone" in res.stdout
+
+
+def test_reports_dir_exposed(demo_workspace: Path) -> None:
+    res = run_code("print(REPORTS_DIR)", _cfg(demo_workspace), {})
+    assert res.returncode == 0 and "reports" in res.stdout

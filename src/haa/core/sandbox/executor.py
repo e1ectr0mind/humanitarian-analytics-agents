@@ -69,13 +69,16 @@ _sys.addaudithook(_audit)
 _PII = _CFG["pii_columns"]
 _DATASETS = _CFG["datasets"]
 CHARTS_DIR = _CFG["charts_dir"]
+REPORTS_DIR = _CFG["reports_dir"]
 
 
-def load_dataset(name: str) -> "pd.DataFrame":
+def load_dataset(name: str, include_pii: bool = False) -> "pd.DataFrame":
     if name not in _DATASETS:
         raise KeyError(f"unknown dataset {{name!r}}; available: {{sorted(_DATASETS)}}")
     path = _DATASETS[name]
     df = pd.read_csv(path) if path.lower().endswith(".csv") else pd.read_excel(path)
+    if include_pii:
+        return df
     drop = [c for c in _PII.get(name, []) if c in df.columns]
     return df.drop(columns=drop)
 
@@ -115,6 +118,7 @@ def run_code(code: str, config: HaaConfig, pii_map: dict[str, list[str]]) -> Exe
     cfg = {
         "table_row_cap": config.table_row_cap,
         "charts_dir": str(config.charts_dir),
+        "reports_dir": str(config.reports_dir),
         "datasets": datasets,
         "pii_columns": pii_map,
         "allowed_roots": _allowed_roots(config),

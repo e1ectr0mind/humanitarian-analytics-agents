@@ -47,6 +47,7 @@ class DataToolbox:
         self._profiles: dict[str, dict] = {}
         self._consecutive_failures = 0
         self._broken: dict[str, str] = {}
+        self._mtimes: dict[str, float] = {}
 
     def reset_failures(self) -> None:
         self._consecutive_failures = 0
@@ -63,23 +64,30 @@ class DataToolbox:
         return "Available datasets:\n" + "\n".join(lines)
 
     def _ensure_profiled(self, name: str) -> dict | None:
-        if name in self._profiles:
-            return self._profiles[name]
-        if name in self._broken:
-            return None
         found = discover_datasets(self.config.data_dir)
         if name not in found:
             return None
+        mtime = found[name].stat().st_mtime
+        if self._mtimes.get(name) != mtime:
+            self._profiles.pop(name, None)
+            self._pii_map.pop(name, None)
+            self._broken.pop(name, None)
+        if name in self._broken:
+            return None
+        if name in self._profiles:
+            return self._profiles[name]
         path = found[name]
         try:
             df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
-            pii = detect_pii_columns(df)
-            self._pii_map[name] = pii
-            self._profiles[name] = profile_dataframe(df, name, pii)
-            return self._profiles[name]
-        except Exception as exc:  # corrupt/unreadable file — remember and report friendly
+        except Exception as exc:
             self._broken[name] = str(exc)
+            self._mtimes[name] = mtime
             return None
+        pii = detect_pii_columns(df)
+        self._pii_map[name] = pii
+        self._profiles[name] = profile_dataframe(df, name, pii)
+        self._mtimes[name] = mtime
+        return self._profiles[name]
 
     def profile_dataset(self, name: str) -> str:
         profile = self._ensure_profiled(name)
@@ -96,6 +104,10 @@ class DataToolbox:
         # Profile every known dataset once so the PII map covers load_dataset calls.
         for ds in discover_datasets(self.config.data_dir):
             self._ensure_profiled(ds)
+        if "include_pii=True" in code:
+            self.telemetry.log(
+                "pii_access", note="load_dataset(include_pii=True) in submitted code"
+            )
         self.telemetry.log("code_executed", code=code)
         result = run_code(code, self.config, self._pii_map)
         failed = result.timed_out or result.returncode != 0

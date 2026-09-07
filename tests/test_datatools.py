@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pandas as pd
+
 from haa.config import load_config
 from haa.core.telemetry import SessionTelemetry
 from haa.core.tools.datatools import DATA_TOOL_NAMES, DataToolbox
@@ -106,3 +108,35 @@ def test_corrupt_dataset_friendly(tmp_path: Path) -> None:
     out = tb.profile_dataset("broken")
     assert "Failed to read dataset" in out
     assert "1" in tb.run_analysis("print(1)")  # preamble must not crash
+
+
+def test_profile_cache_invalidated_on_mtime(demo_workspace: Path, tmp_path: Path) -> None:
+    import shutil
+
+    ws = tmp_path
+    (ws / "data").mkdir()
+    (ws / "project_docs").mkdir()
+    shutil.copy(demo_workspace / "data" / "beneficiaries.xlsx", ws / "data" / "beneficiaries.xlsx")
+    tb = _toolbox(ws)
+    first = tb.profile_dataset("beneficiaries")
+    df = pd.read_excel(ws / "data" / "beneficiaries.xlsx").head(10)
+    df.to_excel(ws / "data" / "beneficiaries.xlsx", index=False)
+    second = tb.profile_dataset("beneficiaries")
+    assert '"rows": 10' in second and second != first
+
+
+def test_pii_access_logged(demo_workspace: Path) -> None:
+    cfg = load_config(demo_workspace)
+    tele = SessionTelemetry(cfg.logs_dir / "pii.jsonl")
+    DataToolbox(cfg, tele).run_analysis(
+        'df = load_dataset("beneficiaries", include_pii=True)\nprint(len(df))'
+    )
+    log = tele.path.read_text(encoding="utf-8")
+    assert '"kind": "pii_access"' in log
+
+
+def test_no_pii_access_event_without_flag(demo_workspace: Path) -> None:
+    cfg = load_config(demo_workspace)
+    tele = SessionTelemetry(cfg.logs_dir / "nopii.jsonl")
+    DataToolbox(cfg, tele).run_analysis("print(1)")
+    assert "pii_access" not in tele.path.read_text(encoding="utf-8")

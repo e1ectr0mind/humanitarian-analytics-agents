@@ -6,6 +6,7 @@ ANTHROPIC_API_KEY in the environment.
 """
 
 import os
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -13,6 +14,12 @@ import pytest
 
 from haa.config import load_config
 from haa.core.session import AnalyticsSession
+
+
+def _numbers(text: str) -> set[int]:
+    """Extract whole numbers, tolerating '3 000' / '3,000' style thousand separators."""
+    cleaned = re.sub(r"(?<=\d)[\s ,](?=\d\d\d\b)", "", text)
+    return {int(n) for n in re.findall(r"\d+", cleaned)}
 
 pytestmark = [
     pytest.mark.api,
@@ -34,27 +41,32 @@ def df(demo_workspace: Path) -> pd.DataFrame:
 async def test_unique_households(demo_workspace: Path, df: pd.DataFrame) -> None:
     expected = df["_uuid"].nunique()  # 3000
     answer = await _answer(demo_workspace, "How many unique household submissions are in the data?")
-    assert str(expected) in answer.replace(" ", "").replace(",", "").replace(" ", "")
+    assert expected in _numbers(answer)
 
 
 async def test_households_per_oblast(demo_workspace: Path, df: pd.DataFrame) -> None:
     top_oblast = df["oblast"].value_counts().idxmax()
+    raw_count = int(df["oblast"].value_counts().max())
+    dedup_count = int(df.drop_duplicates("_uuid")["oblast"].value_counts()[top_oblast])
     answer = await _answer(demo_workspace, "Скільки домогосподарств по областях? Дай таблицю.")
-    assert top_oblast.split()[0][:5] in answer  # oblast name appears
+    assert top_oblast.split()[0][:5] in answer
+    nums = _numbers(answer)
+    assert raw_count in nums or dedup_count in nums
 
 
 async def test_duplicates_found(demo_workspace: Path, df: pd.DataFrame) -> None:
     expected_dupes = len(df) - df["_uuid"].nunique()  # 30
     answer = await _answer(demo_workspace, "Есть ли дубликаты сабмишенов? Сколько?")
-    assert str(expected_dupes) in answer
+    assert expected_dupes in _numbers(answer)
 
 
 async def test_indicator_progress_uses_logframe(demo_workspace: Path, df: pd.DataFrame) -> None:
     answer = await _answer(
         demo_workspace, "What is the target for Indicator 1.1 and what is our current progress?"
     )
-    assert "2500" in answer                       # target read from logframe.md
-    assert str(df["_uuid"].nunique()) in answer   # reached, computed from data
+    nums = _numbers(answer)
+    assert 2500 in nums                      # target read from logframe.md
+    assert df["_uuid"].nunique() in nums     # reached, computed from data
 
 
 async def test_chart_saved(demo_workspace: Path) -> None:
@@ -75,7 +87,7 @@ async def test_no_raw_pii_in_telemetry(demo_workspace: Path) -> None:
             pass
         log_text = session.telemetry.path.read_text(encoding="utf-8")
     df = pd.read_excel(demo_workspace / "data" / "beneficiaries.xlsx")
-    for phone in df["resp_phone"].astype(str).head(20):
+    for phone in df["resp_phone"].astype(str):
         assert phone not in log_text
-    for name in df["resp_name"].astype(str).head(20):
+    for name in df["resp_name"].astype(str):
         assert name not in log_text

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable
 
 from haa.config import HaaConfig
@@ -13,7 +14,7 @@ BLOCK_MESSAGE = (
 )
 
 _FILE_TOOLS = {"Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit"}
-_PATH_KEYS = ("file_path", "path", "notebook_path")
+_PATH_KEYS = ("file_path", "path", "notebook_path", "pattern")
 
 
 def _norm(path: str) -> str:
@@ -21,7 +22,11 @@ def _norm(path: str) -> str:
 
 
 def _under_data_dir(path: str, config: HaaConfig) -> bool:
-    return _norm(path).startswith(_norm(str(config.data_dir)))
+    if not os.path.isabs(os.path.expanduser(path)):
+        path = os.path.join(str(config.workspace), path)
+    target = _norm(path)
+    needle = _norm(str(config.data_dir))
+    return target == needle or target.startswith(needle + os.sep)
 
 
 def deny_reason(tool_name: str, tool_input: dict, config: HaaConfig) -> str | None:
@@ -33,7 +38,11 @@ def deny_reason(tool_name: str, tool_input: dict, config: HaaConfig) -> str | No
     elif tool_name == "Bash":
         command = str(tool_input.get("command", ""))
         needle = os.path.normcase(str(config.data_dir))
-        if needle in os.path.normcase(command):
+        rel_ref = re.compile(
+            r"(^|[\s\"'=(:;|&<>])" + re.escape(config.data_dir.name) + r"[\\/]",
+            re.IGNORECASE,
+        )
+        if needle in os.path.normcase(command) or rel_ref.search(command):
             return BLOCK_MESSAGE
     return None
 

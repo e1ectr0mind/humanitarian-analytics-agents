@@ -63,3 +63,25 @@ async def test_adapter_allows_with_empty_dict(cfg) -> None:
     hook = make_pretooluse_hook(cfg)
     out = await hook({"tool_name": "Bash", "tool_input": {"command": "ls"}}, None, None)
     assert out == {}
+
+
+def test_bash_relative_data_ref_denied(cfg) -> None:
+    assert deny_reason("Bash", {"command": "cat data/x.csv"}, cfg) is not None
+
+
+def test_bash_unrelated_data_word_allowed(cfg) -> None:
+    cmd = "echo data analysis of database/report.txt"
+    assert deny_reason("Bash", {"command": cmd}, cfg) is None
+
+
+def test_glob_pattern_only_denied(cfg) -> None:
+    assert deny_reason("Glob", {"pattern": "data/**/*.csv"}, cfg) is not None
+
+
+def test_relative_file_path_denied(cfg) -> None:
+    assert deny_reason("Read", {"file_path": "data/x.csv"}, cfg) is not None
+
+
+def test_sibling_data_prefix_dir_allowed(cfg) -> None:
+    path = str(cfg.workspace / "data_export" / "x.csv")
+    assert deny_reason("Read", {"file_path": path}, cfg) is None

@@ -11,6 +11,7 @@ from haa.core.session import (
 )
 from haa.core.telemetry import SessionTelemetry
 from haa.core.tools.datatools import DATA_TOOL_NAMES
+from haa.core.tools.sourcetools import SOURCE_TOOL_NAMES
 
 
 # --- fakes whose class names mimic SDK message/block types -----------------
@@ -108,7 +109,9 @@ def test_build_options(demo_workspace: Path) -> None:
     assert opts.model == "claude-opus-5"
     assert "analyst" in opts.agents
     assert "data" in opts.mcp_servers
+    assert "sources" in opts.mcp_servers
     assert set(DATA_TOOL_NAMES) <= set(opts.allowed_tools)
+    assert set(SOURCE_TOOL_NAMES) <= set(opts.allowed_tools)
     assert "Agent" in opts.allowed_tools
     assert "Task" in opts.allowed_tools
     assert opts.permission_mode == "dontAsk"

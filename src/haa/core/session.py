@@ -12,6 +12,7 @@ from haa.core.agents.registry import build_agents
 from haa.core.hooks import make_pretooluse_hook
 from haa.core.telemetry import SessionTelemetry
 from haa.core.tools.datatools import DATA_TOOL_NAMES, DataToolbox, build_data_server
+from haa.core.tools.sourcetools import SOURCE_TOOL_NAMES, SourceToolbox, build_sources_server
 
 
 class BudgetExceeded(RuntimeError):
@@ -83,6 +84,8 @@ class AnalyticsSession:
         self.telemetry = SessionTelemetry(config.logs_dir / f"session-{stamp}.jsonl")
         self._toolbox = DataToolbox(config, self.telemetry)
         self._server = build_data_server(self._toolbox)
+        self._source_toolbox = SourceToolbox(config, self.telemetry)
+        self._sources_server = build_sources_server(self._source_toolbox)
         self._spent_usd = 0.0
         self._client = None
 
@@ -97,8 +100,8 @@ class AnalyticsSession:
             model=self.config.orchestrator_model,
             system_prompt=ORCHESTRATOR_PROMPT,
             agents=build_agents(self.config),
-            mcp_servers={"data": self._server},
-            allowed_tools=["Agent", "Task", *DATA_TOOL_NAMES],
+            mcp_servers={"data": self._server, "sources": self._sources_server},
+            allowed_tools=["Agent", "Task", *DATA_TOOL_NAMES, *SOURCE_TOOL_NAMES],
             disallowed_tools=["WebSearch", "WebFetch"],
             permission_mode="dontAsk",
             hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[hook])]},

@@ -45,6 +45,7 @@ class DataToolbox:
         self._pii_map: dict[str, list[str]] = {}
         self._profiles: dict[str, dict] = {}
         self._consecutive_failures = 0
+        self._broken: dict[str, str] = {}
 
     def reset_failures(self) -> None:
         self._consecutive_failures = 0
@@ -63,19 +64,27 @@ class DataToolbox:
     def _ensure_profiled(self, name: str) -> dict | None:
         if name in self._profiles:
             return self._profiles[name]
+        if name in self._broken:
+            return None
         found = discover_datasets(self.config.data_dir)
         if name not in found:
             return None
         path = found[name]
-        df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
-        pii = detect_pii_columns(df)
-        self._pii_map[name] = pii
-        self._profiles[name] = profile_dataframe(df, name, pii)
-        return self._profiles[name]
+        try:
+            df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
+            pii = detect_pii_columns(df)
+            self._pii_map[name] = pii
+            self._profiles[name] = profile_dataframe(df, name, pii)
+            return self._profiles[name]
+        except Exception as exc:  # corrupt/unreadable file — remember and report friendly
+            self._broken[name] = str(exc)
+            return None
 
     def profile_dataset(self, name: str) -> str:
         profile = self._ensure_profiled(name)
         if profile is None:
+            if name in self._broken:
+                return f"Failed to read dataset {name!r}: {self._broken[name]}"
             known = ", ".join(sorted(discover_datasets(self.config.data_dir))) or "(none)"
             return f"Unknown dataset {name!r}. Available: {known}"
         return json.dumps(profile, ensure_ascii=False, indent=1)

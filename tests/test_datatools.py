@@ -97,3 +97,12 @@ def test_build_data_server_importable(demo_workspace: Path) -> None:
 
     server = build_data_server(_toolbox(demo_workspace))
     assert server is not None
+
+
+def test_corrupt_dataset_friendly(tmp_path: Path) -> None:
+    cfg = load_config(tmp_path)
+    (cfg.data_dir / "broken.xlsx").write_bytes(b"not a real xlsx")
+    tb = DataToolbox(cfg, SessionTelemetry(cfg.logs_dir / "t.jsonl"))
+    out = tb.profile_dataset("broken")
+    assert "Failed to read dataset" in out
+    assert "1" in tb.run_analysis("print(1)")  # preamble must not crash

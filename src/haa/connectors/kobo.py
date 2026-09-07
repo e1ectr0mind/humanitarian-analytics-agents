@@ -57,3 +57,12 @@ class KoboConnector:
             raise ConnectorError(f"Form {target.name!r} has 0 submissions — nothing to pull.")
         path = write_pull(rows_to_dataframe(rows), dest_dir, target.name)
         return PullResult(path=path, rows=len(rows), form=target)
+
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self) -> KoboConnector:
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        self.close()

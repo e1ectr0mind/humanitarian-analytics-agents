@@ -85,3 +85,16 @@ def test_empty_form_no_file(connector: KoboConnector, tmp_path: Path) -> None:
     with pytest.raises(ConnectorError, match="0 submissions"):
         connector.pull("aXb1", tmp_path)
     assert not list(tmp_path.iterdir())
+
+
+def test_close_releases_client(connector: KoboConnector) -> None:
+    connector.close()
+    assert connector._client.is_closed
+
+
+@respx.mock
+def test_context_manager() -> None:
+    respx.get(f"{BASE}/api/v2/assets/").mock(return_value=httpx.Response(200, json=ASSETS))
+    with KoboConnector(BASE, "tok") as c:
+        c.list_forms()
+    assert c._client.is_closed

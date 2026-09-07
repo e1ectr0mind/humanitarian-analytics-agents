@@ -123,7 +123,7 @@ async def test_cleaner_produces_clean_copy(demo_workspace: Path, df: pd.DataFram
     reports = list(cfg.reports_dir.glob("*cleaning_report*.md"))
     assert reports, "cleaning report not created"
     report_text = reports[0].read_text(encoding="utf-8")
-    assert str(len(df) - df["_uuid"].nunique()) in report_text  # 30 duplicates reported
+    assert (len(df) - df["_uuid"].nunique()) in _numbers(report_text)  # 30 duplicates reported
 
     raw_again = pd.read_excel(demo_workspace / "data" / "beneficiaries.xlsx")
     pd.testing.assert_frame_equal(raw_again, df)         # raw byte-identical

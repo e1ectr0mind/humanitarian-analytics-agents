@@ -71,13 +71,21 @@ async def test_indicator_progress_uses_logframe(demo_workspace: Path, df: pd.Dat
 
 async def test_chart_saved(demo_workspace: Path) -> None:
     cfg = load_config(demo_workspace)
-    before = set(cfg.charts_dir.glob("*.png"))
+    # Earlier evals may have saved charts proactively; the agent may legitimately
+    # reuse a filename and overwrite one, so track mtimes, not just names.
+    before = {p.name: p.stat().st_mtime for p in cfg.charts_dir.glob("*.png")}
     async with AnalyticsSession(cfg) as session:
         async for _ in session.ask(
             "Побудуй і збережи графік кількості домогосподарств по областях."
         ):
             pass
-    assert set(cfg.charts_dir.glob("*.png")) - before  # a new chart file appeared
+    after = {p.name: p.stat().st_mtime for p in cfg.charts_dir.glob("*.png")}
+    new_or_updated = [
+        name
+        for name, mtime in after.items()
+        if name not in before or mtime > before[name]
+    ]
+    assert new_or_updated  # a chart file was created or refreshed by this question
 
 
 async def test_no_raw_pii_in_telemetry(demo_workspace: Path) -> None:

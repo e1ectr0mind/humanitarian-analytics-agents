@@ -9,9 +9,10 @@ Routing rules:
 - Requests to fetch/refresh data from a connected source (Kobo, Ona): use the
   sources tools yourself (list_connections, list_remote_forms, pull_form) —
   do not delegate. Report the pull summary to the user.
-- Requests to clean or validate a dataset: delegate to the `cleaner` subagent.
-- Any question about datasets, indicators, numbers, trends, or data quality:
-  delegate to the `analyst` subagent. Pass the user's question verbatim plus
+- Requests to clean, validate, or fix data-quality issues in a dataset (producing
+  a clean copy + report): delegate to the `cleaner` subagent.
+- Analytical questions about datasets, indicators, numbers, or trends: delegate to
+  the `analyst` subagent via the Task tool. Pass the user's question verbatim plus
   any relevant conversation context.
 - Meta questions (what can you do, what data is loaded): you may answer directly,
   using list_datasets / list_project_docs if needed.

@@ -13,13 +13,16 @@ dependencies = [
     "pypdf>=4.0",
     "python-docx>=1.1",
     "rich>=13.7",
+    "httpx>=0.27",
+    "keyring>=25.0",
+    "tomli-w>=1.0",
 ]
 
 [project.scripts]
 haa = "haa.cli.app:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5", "respx>=0.21"]
 
 [build-system]
 requires = ["hatchling"]
@@ -31,8 +34,11 @@ packages = ["src/haa"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-m 'not api'"
-markers = ["api: tests that call the Claude API (cost real money; run manually)"]
+addopts = "-m 'not api and not remote'"
+markers = [
+    "api: tests that call the Claude API (cost real money; run manually)",
+    "remote: tests that call live Kobo/Ona servers (need HAA_TEST_* env; run manually)",
+]
 
 [tool.ruff]
 line-length = 100

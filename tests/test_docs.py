@@ -65,3 +65,9 @@ def test_path_traversal_rejected(docs_dir: Path, tmp_path: Path) -> None:
     (tmp_path / "outside.md").write_text("secret", encoding="utf-8")
     with pytest.raises(DocError):
         read_doc(docs_dir, "../outside.md")
+
+
+def test_corrupt_docx_raises_docerror(docs_dir: Path) -> None:
+    (docs_dir / "broken.docx").write_bytes(b"this is not a zip archive")
+    with pytest.raises(DocError, match="Failed to read"):
+        read_doc(docs_dir, "broken.docx")

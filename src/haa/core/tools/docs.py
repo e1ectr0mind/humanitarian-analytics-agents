@@ -98,7 +98,13 @@ _READERS = {
 
 def read_doc(docs_dir: Path, name: str, max_chars: int = 30000) -> str:
     path = _resolve(docs_dir, name)
-    text = _READERS[path.suffix.lower()](path)
+    reader = _READERS[path.suffix.lower()]
+    try:
+        text = reader(path)
+    except DocError:
+        raise
+    except Exception as exc:
+        raise DocError(f"Failed to read {name}: {exc}") from exc
     if len(text) > max_chars:
         text = text[:max_chars] + "\n[... document truncated ...]"
     return text

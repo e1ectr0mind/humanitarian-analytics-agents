@@ -71,3 +71,19 @@ def test_stderr_returned_on_error(demo_workspace: Path) -> None:
     res = run_code("1/0", _cfg(demo_workspace), {})
     assert res.returncode != 0
     assert "ZeroDivisionError" in res.stderr
+
+
+def test_sandbox_boundary_check(demo_workspace: Path) -> None:
+    """Verify boundary-aware path check: sibling dir with extended name is denied."""
+    # Create a sibling directory whose name extends the workspace name
+    # (e.g., workspace="/tmp/pytest-123/workspace", evil="/tmp/pytest-123/workspace_evil")
+    # The old startswith check would incorrectly allow it; the fixed check must deny it.
+    evil_workspace = demo_workspace.parent / (demo_workspace.name + "_evil")
+    evil_workspace.mkdir(parents=True, exist_ok=True)
+    secret_file = evil_workspace / "secret.txt"
+    secret_file.write_text("evil data", encoding="utf-8")
+
+    code = f"print(open({str(secret_file)!r}).read())"
+    res = run_code(code, _cfg(demo_workspace), {})
+    assert res.returncode != 0, f"Expected error, got stdout={res.stdout!r}, stderr={res.stderr!r}"
+    assert "evil data" not in res.stdout

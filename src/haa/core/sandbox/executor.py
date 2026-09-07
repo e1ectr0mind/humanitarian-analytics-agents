@@ -58,7 +58,7 @@ _ALLOWED = tuple(_os.path.normcase(r) for r in _CFG["allowed_roots"])
 def _audit(event, args):
     if event == "open" and args and args[0] is not None and isinstance(args[0], (str, bytes)):
         path = _os.path.normcase(_os.path.abspath(_os.fsdecode(args[0])))
-        if not path.startswith(_ALLOWED):
+        if not any(path == root or path.startswith(root + _os.sep) for root in _ALLOWED):
             raise PermissionError(f"sandbox: access outside workspace denied: {{path}}")
 
 

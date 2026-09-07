@@ -37,7 +37,7 @@ def build_analyst(config: HaaConfig) -> AgentDefinition:
     return AgentDefinition(
         description=(
             "Data analyst for workspace datasets: profiling, pandas analysis, "
-            "indicator calculations, charts. Delegate any data question here."
+            "indicator calculations, charts. Delegate analytical questions here."
         ),
         prompt=ANALYST_PROMPT,
         tools=list(DATA_TOOL_NAMES),

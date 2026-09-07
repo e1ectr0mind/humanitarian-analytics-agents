@@ -41,4 +41,5 @@ def test_ona_live_roundtrip(tmp_path: Path) -> None:
     if not with_data:
         pytest.skip("no forms with submissions on this account")
     result = OnaConnector(url, token).pull(with_data[0].uid, tmp_path)
-    assert result.rows > 0 and result.path.exists()
+    assert result.path.exists()
+    assert result.rows == with_data[0].submissions, (result.rows, with_data[0].submissions)

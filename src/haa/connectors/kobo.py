@@ -15,6 +15,8 @@ from haa.connectors.base import (
     write_pull,
 )
 
+_MAX_PAGES = 1000
+
 
 class KoboConnector:
     def __init__(self, base_url: str, token: str, timeout: float = 30.0, page_size: int = 1000):
@@ -25,14 +27,24 @@ class KoboConnector:
         )
 
     def list_forms(self) -> list[RemoteForm]:
-        data = get_json(self._client, f"{self.base_url}/api/v2/assets/", params={"format": "json"})
+        results: list[dict] = []
+        url: str | None = f"{self.base_url}/api/v2/assets/"
+        params: dict | None = {"format": "json"}
+        for _ in range(_MAX_PAGES):
+            if url is None:
+                break
+            data = get_json(self._client, url, params=params)
+            results.extend(data.get("results", []))
+            url, params = data.get("next"), None  # `next` is a full URL
+        else:
+            raise ConnectorError(f"Pagination did not terminate after {_MAX_PAGES} pages")
         return [
             RemoteForm(
                 uid=a["uid"],
                 name=a["name"],
                 submissions=a.get("deployment__submission_count"),
             )
-            for a in data.get("results", [])
+            for a in results
             if a.get("asset_type") == "survey"
         ]
 
@@ -49,10 +61,14 @@ class KoboConnector:
         rows: list[dict] = []
         url: str | None = f"{self.base_url}/api/v2/assets/{target.uid}/data/"
         params: dict | None = {"format": "json", "limit": self.page_size}
-        while url:
+        for _ in range(_MAX_PAGES):
+            if url is None:
+                break
             page = get_json(self._client, url, params=params)
             rows.extend(page.get("results", []))
             url, params = page.get("next"), None  # `next` is a full URL
+        else:
+            raise ConnectorError(f"Pagination did not terminate after {_MAX_PAGES} pages")
         if not rows:
             raise ConnectorError(f"Form {target.name!r} has 0 submissions — nothing to pull.")
         path = write_pull(rows_to_dataframe(rows), dest_dir, target.name)

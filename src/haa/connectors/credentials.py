@@ -7,6 +7,7 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import keyring
 import tomli_w
@@ -50,10 +51,26 @@ def env_var_name(profile: str) -> str:
 def save_connection(workspace: Path, conn: Connection, token: str) -> None:
     if conn.kind not in VALID_KINDS:
         raise CredentialsError(f"Unknown connection kind {conn.kind!r}; use one of {VALID_KINDS}")
+    parts = urlsplit(conn.base_url)
+    if parts.username or parts.password:
+        host = parts.hostname or ""
+        if parts.port:
+            host += f":{parts.port}"
+        conn = Connection(
+            conn.name,
+            conn.kind,
+            urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment)),
+        )
+    try:
+        keyring.set_password(KEYRING_SERVICE, conn.name, token)
+    except Exception as exc:
+        raise CredentialsError(
+            f"Could not store the token in the OS credential store ({exc}). "
+            f"Set {env_var_name(conn.name)} instead, then re-run haa connect."
+        ) from exc
     data = _read_all(workspace)
     data[conn.name] = {"kind": conn.kind, "base_url": conn.base_url.rstrip("/")}
     _write_all(workspace, data)
-    keyring.set_password(KEYRING_SERVICE, conn.name, token)
 
 
 def list_connections(workspace: Path) -> list[Connection]:
@@ -69,7 +86,11 @@ def load_connection(workspace: Path, name: str) -> tuple[Connection, str]:
         known = ", ".join(sorted(data)) or "(none)"
         raise CredentialsError(f"Unknown connection {name!r}. Known: {known}")
     conn = Connection(name=name, kind=data[name]["kind"], base_url=data[name]["base_url"])
-    token = keyring.get_password(KEYRING_SERVICE, name) or os.environ.get(env_var_name(name))
+    try:
+        token = keyring.get_password(KEYRING_SERVICE, name)
+    except Exception:  # no backend / locked vault / access denied
+        token = None
+    token = token or os.environ.get(env_var_name(name))
     if not token:
         raise CredentialsError(
             f"No token for {name!r}: not in the OS credential store and "

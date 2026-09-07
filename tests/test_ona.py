@@ -33,22 +33,24 @@ def test_list_forms(connector: OnaConnector) -> None:
 @respx.mock
 def test_pull_paginates(connector: OnaConnector, tmp_path: Path) -> None:
     respx.get(f"{BASE}/api/v1/forms").mock(return_value=httpx.Response(200, json=FORMS))
-    respx.get(f"{BASE}/api/v1/data/101", params={"page": "1", "page_size": "2"}).mock(
-        return_value=httpx.Response(200, json=ROWS_P1)
-    )
-    respx.get(f"{BASE}/api/v1/data/101", params={"page": "2", "page_size": "2"}).mock(
-        return_value=httpx.Response(200, json=ROWS_P2)
+    route = respx.get(f"{BASE}/api/v1/data/101").mock(
+        side_effect=[
+            httpx.Response(200, json=ROWS_P1),
+            httpx.Response(200, json=ROWS_P2),
+            httpx.Response(200, json=[]),
+        ]
     )
     result = connector.pull("hh_survey", tmp_path)
     assert result.rows == 3
     assert len(pd.read_excel(result.path)) == 3
+    assert route.call_count == 3
 
 
 @respx.mock
 def test_pull_by_title(connector: OnaConnector, tmp_path: Path) -> None:
     respx.get(f"{BASE}/api/v1/forms").mock(return_value=httpx.Response(200, json=FORMS))
     respx.get(url__startswith=f"{BASE}/api/v1/data/101").mock(
-        return_value=httpx.Response(200, json=ROWS_P2)
+        side_effect=[httpx.Response(200, json=ROWS_P2), httpx.Response(200, json=[])]
     )
     assert connector.pull("Household Survey", tmp_path).form.uid == "101"
 

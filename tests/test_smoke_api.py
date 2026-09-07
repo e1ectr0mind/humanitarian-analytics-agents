@@ -111,6 +111,7 @@ async def test_cleaner_produces_clean_copy(demo_workspace: Path, df: pd.DataFram
             "разнобой категорий. Сырой файл не трогай."
         ):
             pass
+        log_text = session.telemetry.path.read_text(encoding="utf-8")
 
     clean_path = cfg.data_dir / "beneficiaries_clean.xlsx"
     assert clean_path.exists(), "clean copy not created"
@@ -124,6 +125,9 @@ async def test_cleaner_produces_clean_copy(demo_workspace: Path, df: pd.DataFram
     assert reports, "cleaning report not created"
     report_text = reports[0].read_text(encoding="utf-8")
     assert (len(df) - df["_uuid"].nunique()) in _numbers(report_text)  # 30 duplicates reported
+
+    for value in (*df["resp_phone"].astype(str), *df["resp_name"].astype(str)):
+        assert value not in log_text
 
     raw_again = pd.read_excel(demo_workspace / "data" / "beneficiaries.xlsx")
     pd.testing.assert_frame_equal(raw_again, df)         # raw byte-identical

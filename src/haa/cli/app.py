@@ -26,16 +26,19 @@ def run_connect(workspace: Path, kind: str, name: str, base_url: str, token: str
 
 
 def run_pull(workspace: Path, profile: str, form: str) -> str:
-    from haa.connectors.base import ConnectorError
-    from haa.connectors.credentials import CredentialsError, load_connection, make_connector
+    from datetime import UTC, datetime
+
+    from haa.config import ConfigError, load_config
+    from haa.core.telemetry import SessionTelemetry
+    from haa.core.tools.sourcetools import SourceToolbox
 
     try:
-        conn, token = load_connection(workspace, profile)
-        with make_connector(conn, token) as connector:
-            result = connector.pull(form, workspace / "data")
-    except (ConnectorError, CredentialsError) as exc:
+        cfg = load_config(workspace)
+    except ConfigError as exc:
         return str(exc)
-    return f"Pulled {result.rows} submissions of {result.form.name!r} into {result.path.name}"
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    telemetry = SessionTelemetry(cfg.logs_dir / f"cli-pull-{stamp}.jsonl")
+    return SourceToolbox(cfg, telemetry).pull_form(profile, form)
 
 
 def build_parser() -> argparse.ArgumentParser:

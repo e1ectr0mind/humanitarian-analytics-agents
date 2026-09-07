@@ -96,3 +96,35 @@ def test_env_var_name() -> None:
 
 def test_no_connections_file(tmp_path: Path) -> None:
     assert list_connections(tmp_path) == []
+
+
+def test_env_fallback_when_keyring_raises(tmp_path: Path, mem_keyring, monkeypatch) -> None:
+    save_connection(tmp_path, CONN, "secret")
+
+    def _raise(service, username):
+        raise RuntimeError("no backend available")
+
+    monkeypatch.setattr(keyring, "get_password", _raise)
+    monkeypatch.setenv("HAA_TOKEN_IMC_KOBO", "env-token")
+    _, token = load_connection(tmp_path, "imc-kobo")
+    assert token == "env-token"
+
+
+def test_save_failure_leaves_no_profile(tmp_path: Path, mem_keyring, monkeypatch) -> None:
+    def _raise(service, username, password):
+        raise RuntimeError("vault locked")
+
+    monkeypatch.setattr(keyring, "set_password", _raise)
+    with pytest.raises(CredentialsError, match="HAA_TOKEN_IMC_KOBO"):
+        save_connection(tmp_path, CONN, "secret")
+    toml_path = tmp_path / "connections.toml"
+    assert not toml_path.is_file() or "imc-kobo" not in toml_path.read_text(encoding="utf-8")
+
+
+def test_base_url_userinfo_stripped(tmp_path: Path) -> None:
+    conn = Connection(name="imc-kobo2", kind="kobo", base_url="https://secret-tok@kf.example.org")
+    save_connection(tmp_path, conn, "secret-token")
+    text = (tmp_path / "connections.toml").read_text(encoding="utf-8")
+    assert "secret-tok" not in text
+    loaded, _ = load_connection(tmp_path, "imc-kobo2")
+    assert loaded.base_url == "https://kf.example.org"

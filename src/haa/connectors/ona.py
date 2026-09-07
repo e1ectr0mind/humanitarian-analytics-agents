@@ -15,6 +15,8 @@ from haa.connectors.base import (
     write_pull,
 )
 
+_MAX_PAGES = 1000
+
 
 class OnaConnector:
     def __init__(self, base_url: str, token: str, timeout: float = 30.0, page_size: int = 1000):
@@ -51,16 +53,18 @@ class OnaConnector:
         target = self._resolve(form)
         rows: list[dict] = []
         page = 1
-        while True:
+        while page <= _MAX_PAGES:
             batch = get_json(
                 self._client,
                 f"{self.base_url}/api/v1/data/{target.uid}",
                 params={"page": page, "page_size": self.page_size},
             )
-            rows.extend(batch)
-            if len(batch) < self.page_size:
+            if not batch:
                 break
+            rows.extend(batch)
             page += 1
+        else:
+            raise ConnectorError(f"Pagination did not terminate after {_MAX_PAGES} pages")
         if not rows:
             raise ConnectorError(f"Form {target.name!r} has 0 submissions — nothing to pull.")
         path = write_pull(rows_to_dataframe(rows), dest_dir, target.name)

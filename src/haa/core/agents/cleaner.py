@@ -12,7 +12,8 @@ You produce TWO artifacts per dataset and NEVER modify the raw file:
    data directory the raw file lives in — write it via run_analysis code using
    df.to_excel(f"data/{name}_clean.xlsx", index=False) relative to the workspace).
 2. A human-readable report `<dataset>_cleaning_report.md` written into REPORTS_DIR
-   (available in the sandbox), with before/after numbers for every action.
+   (available in the sandbox), with before/after numbers for every action, e.g.
+   open(f"{REPORTS_DIR}/{name}_cleaning_report.md", "w", encoding="utf-8")
 
 Cleaning checklist — work through it in order and report each item:
 1. Unique record ID: verify one exists (_uuid, _id or _haa_row_id). If none is

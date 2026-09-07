@@ -27,6 +27,21 @@ PAGE1 = {
 }
 PAGE2 = {"count": 3, "next": None, "results": [{"_uuid": "u3", "oblast": "X", "hh_size": 2}]}
 
+ASSETS_PAGE1 = {
+    "results": [
+        {"uid": "s1", "name": "Survey One", "asset_type": "survey",
+         "deployment__submission_count": 1},
+    ],
+    "next": f"{BASE}/api/v2/assets/?format=json&page=2",
+}
+ASSETS_PAGE2 = {
+    "results": [
+        {"uid": "s2", "name": "Survey Two", "asset_type": "survey",
+         "deployment__submission_count": 2},
+    ],
+    "next": None,
+}
+
 
 @pytest.fixture()
 def connector() -> KoboConnector:
@@ -39,6 +54,24 @@ def test_list_forms_filters_surveys(connector: KoboConnector) -> None:
     forms = connector.list_forms()
     assert [(f.uid, f.name, f.submissions) for f in forms] == [("aXb1", "Household Survey", 3)]
     assert route.calls[0].request.headers["Authorization"] == "Token tok"
+
+
+@respx.mock
+def test_list_forms_paginates(connector: KoboConnector) -> None:
+    # respx matches params as a SUBSET in insertion order — the page-2 route (which
+    # carries the extra `page` param) must be registered FIRST, or page 1's request
+    # (params={"format": "json"}, a subset of page 2's query too) would shadow it.
+    respx.get(f"{BASE}/api/v2/assets/", params={"page": "2"}).mock(
+        return_value=httpx.Response(200, json=ASSETS_PAGE2)
+    )
+    respx.get(f"{BASE}/api/v2/assets/", params={"format": "json"}).mock(
+        return_value=httpx.Response(200, json=ASSETS_PAGE1)
+    )
+    forms = connector.list_forms()
+    assert [(f.uid, f.name, f.submissions) for f in forms] == [
+        ("s1", "Survey One", 1),
+        ("s2", "Survey Two", 2),
+    ]
 
 
 @respx.mock

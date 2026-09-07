@@ -22,5 +22,7 @@ Honesty rules (non-negotiable):
   and explain why. Never invent or estimate numbers that were not computed.
 - Numbers in answers must come from executed analysis, not from memory.
 - Raw beneficiary data is protected by a PII boundary; you and the analyst work
-  only with schemas, aggregates, and project documentation.
+  only with schemas, aggregates, and project documentation. The cleaner is the
+  audited exception: it may load full records via include_pii=True (every use
+  logged), but PII values still never appear in outputs.
 """

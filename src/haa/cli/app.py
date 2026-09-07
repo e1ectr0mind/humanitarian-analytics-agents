@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import getpass
 import sys
 from pathlib import Path
 
@@ -12,6 +13,29 @@ from rich.markdown import Markdown
 
 from haa.config import ConfigError, HaaConfig, load_config
 from haa.core.session import AnalyticsSession, BudgetExceeded
+
+DEFAULT_URLS = {"kobo": "https://kf.kobotoolbox.org", "ona": "https://api.ona.io"}
+
+
+def run_connect(workspace: Path, kind: str, name: str, base_url: str, token: str) -> str:
+    from haa.connectors.credentials import Connection, save_connection
+
+    workspace.mkdir(parents=True, exist_ok=True)
+    save_connection(workspace, Connection(name=name, kind=kind, base_url=base_url), token)
+    return f"Connection {name!r} ({kind}) saved. Token stored in the OS credential store."
+
+
+def run_pull(workspace: Path, profile: str, form: str) -> str:
+    from haa.connectors.base import ConnectorError
+    from haa.connectors.credentials import CredentialsError, load_connection, make_connector
+
+    try:
+        conn, token = load_connection(workspace, profile)
+        with make_connector(conn, token) as connector:
+            result = connector.pull(form, workspace / "data")
+    except (ConnectorError, CredentialsError) as exc:
+        return str(exc)
+    return f"Pulled {result.rows} submissions of {result.form.name!r} into {result.path.name}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,6 +48,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo = sub.add_parser("demo", help="Generate the synthetic demo workspace")
     demo.add_argument("--workspace", type=Path, default=Path("workspace"))
+
+    connect = sub.add_parser("connect", help="Configure a data-source connection")
+    connect.add_argument("kind", choices=["kobo", "ona"])
+    connect.add_argument("--workspace", type=Path, default=Path("workspace"))
+
+    connections = sub.add_parser("connections", help="List configured connections")
+    connections.add_argument("--workspace", type=Path, default=Path("workspace"))
+
+    pull = sub.add_parser("pull", help="Pull a form's submissions into the workspace")
+    pull.add_argument("profile")
+    pull.add_argument("--form", required=True)
+    pull.add_argument("--workspace", type=Path, default=Path("workspace"))
+
     return parser
 
 
@@ -83,6 +120,29 @@ async def _repl(cfg: HaaConfig, console: Console) -> None:
 def main() -> int:
     args = build_parser().parse_args()
     console = Console()
+
+    if args.command == "connect":
+        name = input(f"Profile name [{args.kind}]: ").strip() or args.kind
+        default_url = DEFAULT_URLS[args.kind]
+        base_url = input(f"Server URL [{default_url}]: ").strip() or default_url
+        token = getpass.getpass("API token: ")
+        console.print(run_connect(args.workspace, args.kind, name, base_url, token))
+        return 0
+
+    if args.command == "connections":
+        from haa.connectors.credentials import list_connections
+
+        conns = list_connections(args.workspace)
+        if not conns:
+            console.print("No connections configured. Run: haa connect <kobo|ona>")
+            return 0
+        for conn in conns:
+            console.print(f"{conn.name:20} {conn.kind:10} {conn.base_url}")
+        return 0
+
+    if args.command == "pull":
+        console.print(run_pull(args.workspace, args.profile, args.form))
+        return 0
 
     if args.command == "demo":
         from haa.demo import generate

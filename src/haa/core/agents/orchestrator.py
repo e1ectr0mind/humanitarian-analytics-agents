@@ -7,8 +7,8 @@ Ukrainian, or English).
 
 Routing rules:
 - Any question about datasets, indicators, numbers, trends, or data quality:
-  delegate to the `analyst` subagent via the Task tool. Pass the user's question
-  verbatim plus any relevant conversation context.
+  delegate to the `analyst` subagent. Pass the user's question verbatim plus
+  any relevant conversation context.
 - Meta questions (what can you do, what data is loaded): you may answer directly,
   using list_datasets / list_project_docs if needed.
 

@@ -41,8 +41,15 @@ class UserMessage:
 
 
 class ResultMessage:
-    def __init__(self, total_cost_usd: float) -> None:
+    def __init__(
+        self,
+        total_cost_usd: float,
+        subtype: str | None = None,
+        is_error: bool = False,
+    ) -> None:
         self.total_cost_usd = total_cost_usd
+        self.subtype = subtype
+        self.is_error = is_error
 
 
 def _tele(tmp_path: Path) -> SessionTelemetry:
@@ -77,7 +84,18 @@ def test_result_event_with_cost(tmp_path: Path) -> None:
     events = events_from_message(ResultMessage(0.042), tele)
     assert events[0].kind == "result"
     assert "0.042" in events[0].text
+    assert events[0].cost == pytest.approx(0.042)
     assert tele.summary()["cost_usd"] == pytest.approx(0.042)
+
+
+def test_error_result_event(tmp_path: Path) -> None:
+    tele = _tele(tmp_path)
+    events = events_from_message(
+        ResultMessage(0.05, subtype="error_max_budget_usd", is_error=True), tele
+    )
+    assert events[0].kind == "error"
+    assert "budget" in events[0].text
+    assert events[0].cost == pytest.approx(0.05)
 
 
 def test_unknown_message_ignored(tmp_path: Path) -> None:
@@ -91,9 +109,12 @@ def test_build_options(demo_workspace: Path) -> None:
     assert "analyst" in opts.agents
     assert "data" in opts.mcp_servers
     assert set(DATA_TOOL_NAMES) <= set(opts.allowed_tools)
+    assert "Agent" in opts.allowed_tools
     assert "Task" in opts.allowed_tools
     assert opts.permission_mode == "dontAsk"
     assert opts.hooks  # PreToolUse PII hook registered
+    assert opts.setting_sources == []
+    assert opts.strict_mcp_config is True
 
 
 def test_budget_guard(demo_workspace: Path) -> None:

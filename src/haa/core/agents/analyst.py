@@ -42,4 +42,7 @@ def build_analyst(config: HaaConfig) -> AgentDefinition:
         prompt=ANALYST_PROMPT,
         tools=list(DATA_TOOL_NAMES),
         model=config.analyst_model,
+        # Declare access to the in-process "data" MCP server explicitly rather
+        # than relying on the subagent inheriting the main loop's servers.
+        mcpServers=["data"],
     )

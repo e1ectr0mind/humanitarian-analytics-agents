@@ -27,6 +27,10 @@ def test_bash_touching_data_dir_denied(cfg) -> None:
     assert deny_reason("Bash", {"command": f"cat {cfg.data_dir / 'x.csv'}"}, cfg)
 
 
+def test_powershell_data_ref_denied(cfg) -> None:
+    assert deny_reason("PowerShell", {"command": "Get-Content data/x.csv"}, cfg) is not None
+
+
 def test_project_docs_allowed(cfg) -> None:
     assert deny_reason("Read", {"file_path": str(cfg.docs_dir / "logframe.md")}, cfg) is None
 

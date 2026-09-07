@@ -62,6 +62,8 @@ async def _repl(cfg: HaaConfig, console: Console) -> None:
                         console.print(Markdown(event.text))
                     elif event.kind == "tool":
                         console.print(f"[dim]· {event.text}[/dim]")
+                    elif event.kind == "error":
+                        console.print(f"[red]{event.text}[/red]")
                     else:
                         console.print(f"[dim]{event.text}[/dim]")
             except BudgetExceeded as exc:
@@ -101,6 +103,10 @@ def main() -> int:
         asyncio.run(_repl(cfg, console))
     except KeyboardInterrupt:
         pass
+    except Exception as exc:  # noqa: BLE001 - startup/session failures must not crash bare
+        console.print(f"[red]Failed to start session: {exc}[/red]")
+        console.print("[yellow]Check ANTHROPIC_API_KEY and network connectivity.[/yellow]")
+        return 1
     return 0
 
 

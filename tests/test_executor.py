@@ -73,6 +73,19 @@ def test_stderr_returned_on_error(demo_workspace: Path) -> None:
     assert "ZeroDivisionError" in res.stderr
 
 
+def test_chart_save_offline(demo_workspace: Path) -> None:
+    cfg = _cfg(demo_workspace)
+    code = (
+        "import matplotlib.pyplot as plt\n"
+        "plt.plot([1, 2, 3])\n"
+        "plt.savefig(f'{CHARTS_DIR}/offline_test.png')\n"
+        "print('saved')\n"
+    )
+    res = run_code(code, cfg, {})
+    assert res.returncode == 0, res.stderr
+    assert (cfg.charts_dir / "offline_test.png").exists()
+
+
 def test_sandbox_boundary_check(demo_workspace: Path) -> None:
     """Verify boundary-aware path check: sibling dir with extended name is denied."""
     # Create a sibling directory whose name extends the workspace name

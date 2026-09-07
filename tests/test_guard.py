@@ -14,6 +14,11 @@ def test_redacts_gps_pairs() -> None:
     assert "48.53421" not in res.text
 
 
+def test_redacts_whitespace_gps_pairs() -> None:
+    res = filter_output("48.123456  35.654321", row_cap=50, size_cap=32768)
+    assert "48.123456" not in res.text
+
+
 def test_plain_aggregates_untouched() -> None:
     table = "oblast  count\nДонецька  512\nСумська  380"
     res = filter_output(table, row_cap=50, size_cap=32768)

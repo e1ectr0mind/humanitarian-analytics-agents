@@ -11,7 +11,9 @@ import json
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 from haa.config import HaaConfig
 from haa.core.tools.profiler import discover_datasets
@@ -118,7 +120,8 @@ def run_code(code: str, config: HaaConfig, pii_map: dict[str, list[str]]) -> Exe
         "allowed_roots": _allowed_roots(config),
     }
     script = _PRELUDE.format(cfg_json=json.dumps(cfg)) + code
-    script_path = config.logs_dir / "last_analysis.py"
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    script_path = config.logs_dir / f"analysis-{stamp}-{uuid4().hex[:6]}.py"
     script_path.write_text(script, encoding="utf-8")
 
     try:

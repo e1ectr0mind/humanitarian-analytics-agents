@@ -6,6 +6,7 @@ to the SDK's content-block format.
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pandas as pd
@@ -158,7 +159,7 @@ def build_data_server(box: DataToolbox):
         {"code": str},
     )
     async def run_analysis(args: dict) -> dict:
-        return _text(box.run_analysis(str(args["code"])))
+        return _text(await asyncio.to_thread(box.run_analysis, str(args["code"])))
 
     @tool("list_project_docs", "List project documentation files", {})
     async def list_project_docs(args: dict) -> dict:

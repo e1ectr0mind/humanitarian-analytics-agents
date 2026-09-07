@@ -20,7 +20,9 @@ PHONE_RE = re.compile(
     r"\+380[\s-]\d{2}[\s-]\d{3}[\s-]\d{2}[\s-]\d{2}|"
     r"\b0\d{9}\b|\+\d{11,14}"
 )
-GPS_PAIR_RE = re.compile(r"\b\d{2}\.\d{4,}\s*,\s*\d{2}\.\d{4,}\b")
+GPS_PAIR_RE = re.compile(
+    r"\b\d{2}\.\d{4,}\s*,\s*\d{2}\.\d{4,}\b|\b\d{2}\.\d{4,}\s+\d{2}\.\d{4,}\b"
+)
 
 _VALUE_SAMPLE = 50
 _VALUE_HIT_THRESHOLD = 0.3

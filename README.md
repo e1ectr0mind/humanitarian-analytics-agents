@@ -45,7 +45,7 @@ or *"How are we progressing toward the Indicator 1.1 target?"*
 
     CLI (rich REPL)
       └─ AnalyticsSession  ──ClaudeAgentOptions──►  Claude Agent SDK
-           ├─ orchestrator (main loop) ──Task──► analyst subagent
+           ├─ orchestrator (main loop) ──delegates──► analyst subagent
            ├─ PreToolUse PII hook (deny raw-data reads)
            ├─ in-process MCP server: list_datasets / profile_dataset /
            │    run_analysis / list_project_docs / read_project_doc

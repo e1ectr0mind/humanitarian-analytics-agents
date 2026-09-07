@@ -13,7 +13,7 @@ BLOCK_MESSAGE = (
     "Use profile_dataset / run_analysis from the data toolset instead."
 )
 
-_FILE_TOOLS = {"Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit"}
+_FILE_TOOLS = {"Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "MultiEdit", "LS"}
 _PATH_KEYS = ("file_path", "path", "notebook_path", "pattern")
 
 
@@ -35,7 +35,7 @@ def deny_reason(tool_name: str, tool_input: dict, config: HaaConfig) -> str | No
             value = tool_input.get(key)
             if isinstance(value, str) and value and _under_data_dir(value, config):
                 return BLOCK_MESSAGE
-    elif tool_name == "Bash":
+    elif tool_name in {"Bash", "PowerShell", "Tmux"}:
         command = str(tool_input.get("command", ""))
         needle = os.path.normcase(str(config.data_dir))
         rel_ref = re.compile(

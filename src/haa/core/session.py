@@ -20,8 +20,9 @@ class BudgetExceeded(RuntimeError):
 
 @dataclass(frozen=True)
 class SessionEvent:
-    kind: str  # "text" | "tool" | "result"
+    kind: str  # "text" | "tool" | "result" | "error"
     text: str
+    cost: float | None = None
 
 
 def _block_text(content: object) -> str:
@@ -53,9 +54,25 @@ def events_from_message(msg: object, telemetry: SessionTelemetry) -> list[Sessio
                 telemetry.log("tool_result", content=_block_text(block.content))
     elif kind == "ResultMessage":
         cost = getattr(msg, "total_cost_usd", None)
-        telemetry.log("result", cost_usd=cost)
-        text = f"cost=${cost:.4f}" if isinstance(cost, (int, float)) else "done"
-        events.append(SessionEvent("result", text))
+        subtype = getattr(msg, "subtype", None)
+        is_error = getattr(msg, "is_error", False)
+        usage = getattr(msg, "usage", None)
+        telemetry.log(
+            "result", cost_usd=cost, subtype=subtype, is_error=bool(is_error), usage=usage
+        )
+        if is_error or (subtype and "error" in str(subtype)):
+            spent = f"{cost:.4f}" if isinstance(cost, (int, float)) else "unknown"
+            if subtype == "error_max_budget_usd":
+                text = (
+                    f"budget exhausted mid-turn (spent so far: ${spent}); "
+                    "partial results above"
+                )
+            else:
+                text = f"error during analysis (subtype={subtype}, spent so far: ${spent})"
+            events.append(SessionEvent("error", text, cost=cost))
+        else:
+            text = f"cost=${cost:.4f}" if isinstance(cost, (int, float)) else "done"
+            events.append(SessionEvent("result", text, cost=cost))
     return events
 
 
@@ -81,12 +98,14 @@ class AnalyticsSession:
             system_prompt=ORCHESTRATOR_PROMPT,
             agents=build_agents(self.config),
             mcp_servers={"data": self._server},
-            allowed_tools=["Task", *DATA_TOOL_NAMES],
+            allowed_tools=["Agent", "Task", *DATA_TOOL_NAMES],
             disallowed_tools=["WebSearch", "WebFetch"],
             permission_mode="dontAsk",
             hooks={"PreToolUse": [HookMatcher(matcher=None, hooks=[hook])]},
             max_budget_usd=self.config.max_budget_usd,
             cwd=str(self.config.workspace),
+            setting_sources=[],
+            strict_mcp_config=True,
         )
 
     def _check_budget(self) -> None:
@@ -117,6 +136,6 @@ class AnalyticsSession:
         await self._client.query(question)
         async for msg in self._client.receive_response():
             for event in events_from_message(msg, self.telemetry):
-                if event.kind == "result" and event.text.startswith("cost=$"):
-                    self._spent_usd += float(event.text.removeprefix("cost=$"))
+                if event.kind in ("result", "error"):
+                    self._spent_usd += event.cost or 0.0
                 yield event

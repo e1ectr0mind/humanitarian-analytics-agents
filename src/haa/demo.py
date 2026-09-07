@@ -68,8 +68,14 @@ def generate(workspace: Path, rows: int = 3000, seed: int = 42) -> Path:
             "satisfaction": rng.integers(1, 6, rows),
             "resp_name": [fake.name() for _ in range(rows)],
             "resp_phone": [
-                f"+380{rng.integers(50, 99)}{rng.integers(1000000, 9999999)}"
-                for _ in range(rows)
+                f"+380 {a} {b} {c} {d}"
+                for a, b, c, d in zip(
+                    rng.integers(50, 99, rows),
+                    rng.integers(100, 999, rows),
+                    rng.integers(10, 99, rows),
+                    rng.integers(10, 99, rows),
+                    strict=True,
+                )
             ],
             "gps_lat": np.round(rng.uniform(46.0, 50.5, rows), 6),
             "gps_lon": np.round(rng.uniform(29.5, 38.5, rows), 6),

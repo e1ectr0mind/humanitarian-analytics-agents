@@ -13,8 +13,7 @@ EXPECTED_COLUMNS = [
 
 
 def _load(ws: Path) -> pd.DataFrame:
-    # Specify dtype for resp_phone to preserve "+" prefix (pandas infers it as int64 otherwise)
-    return pd.read_excel(ws / "data" / "beneficiaries.xlsx", dtype={"resp_phone": str})
+    return pd.read_excel(ws / "data" / "beneficiaries.xlsx")
 
 
 def test_shape_and_columns(demo_workspace: Path) -> None:

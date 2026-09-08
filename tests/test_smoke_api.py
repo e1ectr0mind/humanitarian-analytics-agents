@@ -175,7 +175,18 @@ async def test_designer_produces_compiling_form(demo_workspace: Path) -> None:
     wb = openpyxl.load_workbook(xlsx)
     header = [c.value for c in wb["survey"][1]]
     assert "label::Українська (uk)" in header and "label::English (en)" in header
-    names = [row[1] for row in wb["survey"].iter_rows(min_row=2, values_only=True)]
-    joined = " ".join(str(n) for n in names if n)
-    assert "consent" in joined.lower()
-    assert any(k in joined.lower() for k in ("sex", "gender", "stat"))
+
+    question_names = [
+        str(row[1]).lower()
+        for row in wb["survey"].iter_rows(min_row=2, values_only=True)
+        if row[1] and str(row[0]) not in ("begin_group", "end_group")
+    ]
+    tokens = {t for name in question_names for t in name.split("_")}
+
+    consent_found = any(
+        "consent" in name or "zgoda" in name or "згода" in name
+        for name in question_names
+    )
+    assert consent_found, f"no consent question found: {question_names}"
+    sadd_tokens = {"sex", "gender", "stat", "статі", "стать"}
+    assert tokens & sadd_tokens, f"no sex/gender question found: {question_names}"

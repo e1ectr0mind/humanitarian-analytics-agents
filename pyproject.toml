@@ -16,6 +16,8 @@ dependencies = [
     "httpx>=0.27",
     "keyring>=25.0",
     "tomli-w>=1.0",
+    "pyxform>=2.0",
+    "PyYAML>=6.0",
 ]
 
 [project.scripts]

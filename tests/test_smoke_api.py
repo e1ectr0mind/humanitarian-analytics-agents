@@ -131,3 +131,51 @@ async def test_cleaner_produces_clean_copy(demo_workspace: Path, df: pd.DataFram
 
     raw_again = pd.read_excel(demo_workspace / "data" / "beneficiaries.xlsx")
     pd.testing.assert_frame_equal(raw_again, df)         # raw byte-identical
+
+
+async def test_indicator_extraction_builds_registry(demo_workspace: Path) -> None:
+    import yaml
+
+    from haa.indicators.registry import registry_path, validate_registry
+
+    cfg = load_config(demo_workspace)
+    registry_path(cfg.workspace).unlink(missing_ok=True)
+    async with AnalyticsSession(cfg) as session:
+        async for _ in session.ask(
+            "Витягни індикатори з логфрейму проєкту у реєстр індикаторів."
+        ):
+            pass
+
+    data = yaml.safe_load(registry_path(cfg.workspace).read_text(encoding="utf-8"))
+    assert validate_registry(data) == []
+    codes = {str(i["code"]) for i in data["indicators"]}
+    assert "1.1" in codes
+    target = next(i for i in data["indicators"] if str(i["code"]) == "1.1")["target"]
+    assert target["value"] == 2500  # the value stated in demo logframe.md
+
+
+async def test_designer_produces_compiling_form(demo_workspace: Path) -> None:
+    from haa.forms.compiler import compile_check
+
+    cfg = load_config(demo_workspace)
+    async with AnalyticsSession(cfg) as session:
+        async for _ in session.ask(
+            "Створи форму пост-дистрибуційного моніторингу 'pdm': згода, стать і вік "
+            "голови домогосподарства, отримані послуги, задоволеність."
+        ):
+            pass
+
+    xlsx = cfg.forms_dir / "pdm.xlsx"
+    assert xlsx.exists(), "designer did not produce the XLSForm"
+    assert (cfg.forms_dir / "pdm.form.yaml").exists()
+    assert compile_check(xlsx) == []
+
+    import openpyxl
+
+    wb = openpyxl.load_workbook(xlsx)
+    header = [c.value for c in wb["survey"][1]]
+    assert "label::Українська (uk)" in header and "label::English (en)" in header
+    names = [row[1] for row in wb["survey"].iter_rows(min_row=2, values_only=True)]
+    joined = " ".join(str(n) for n in names if n)
+    assert "consent" in joined.lower()
+    assert any(k in joined.lower() for k in ("sex", "gender", "stat"))

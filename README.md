@@ -58,6 +58,21 @@ Ask: *"Clean the beneficiaries dataset."* The cleaner agent produces
 (duplicates, impossible values, category normalization — with before/after
 numbers). The raw file is never modified.
 
+## Indicators and forms
+
+Ask: *"Extract the indicators from the logframe"* — the designer agent reads
+`workspace/project_docs/`, builds `workspace/indicators.yaml` (code, bilingual
+name, definition, target, disaggregation, and — when unambiguous — a
+machine-readable `measure` block), and validates it against a schema. The
+analyst consults that registry when you ask about progress toward a target.
+
+Ask: *"Design a post-distribution monitoring form"* — you get
+`workspace/forms/<name>.form.yaml` (the editable source of truth) and
+`workspace/forms/<name>.xlsx` (an XLSForm, Ukrainian + English, compiled with
+pyxform before it is saved). Upload the .xlsx to Kobo or Ona yourself — this
+tool does not deploy forms. Editing works the same way: *"make the phone
+question optional in pdm"* re-renders the workbook from the updated model.
+
 ## Architecture
 
     CLI (rich REPL)
@@ -88,7 +103,6 @@ tests on every push.
 
 ## Roadmap
 
-This is subproject 1 of 6: core + analyst agent + connectors/cleaner. Next:
-indicator registry + XLSForm designer, SharePoint connector, reporting
-(5W/MEAL), a Power BI engineer agent (via MCP), and a web UI. Design docs live
+**Completed:** Core + analyst agent, connectors/cleaner, indicator registry + XLSForm designer.
+**Remaining:** SharePoint connector, reporting agent (5W/MEAL), Power BI engineer, web UI. Design docs live
 in `docs/superpowers/specs/`.

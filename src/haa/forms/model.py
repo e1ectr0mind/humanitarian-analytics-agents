@@ -54,13 +54,13 @@ def _validate_question(
     name = question.get("name")
     _check_name(name, f"{where}.name", errors)
     qtype = question.get("type")
-    if qtype not in QUESTION_TYPES:
+    if not isinstance(qtype, str) or qtype not in QUESTION_TYPES:
         errors.append(
             f"{where} ({name!r}): unknown type {qtype!r}; allowed: "
             f"{', '.join(sorted(QUESTION_TYPES))}"
         )
     _check_label(question.get("label"), f"{where}.label ({name!r})", errors)
-    if qtype in SELECT_TYPES:
+    if isinstance(qtype, str) and qtype in SELECT_TYPES:
         list_name = question.get("list")
         if not isinstance(list_name, str) or not list_name:
             errors.append(f"{where} ({name!r}): select question needs a 'list' name")

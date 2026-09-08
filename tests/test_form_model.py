@@ -134,3 +134,29 @@ def test_iter_questions_order(model: dict) -> None:
 
 def test_question_types_constant() -> None:
     assert {"text", "integer", "select_one", "select_multiple", "note"} <= QUESTION_TYPES
+
+
+def test_unhashable_type_does_not_raise(model: dict) -> None:
+    model["groups"][0]["questions"][0]["type"] = ["select_one"]
+    errors = validate_model(model)  # must not raise
+    assert any("consent_given" in e for e in errors)
+
+
+def test_dict_type_does_not_raise(model: dict) -> None:
+    model["groups"][1]["questions"][0]["type"] = {"a": 1}
+    assert any("head_sex" in e for e in validate_model(model))
+
+
+def test_non_dict_question_does_not_raise(model: dict) -> None:
+    model["groups"][0]["questions"][0] = "just a string"
+    assert any("groups[0].questions[0]" in e for e in validate_model(model))
+
+
+def test_duplicate_group_names(model: dict) -> None:
+    model["groups"][1]["name"] = "consent"
+    assert any("duplicate group name" in e for e in validate_model(model))
+
+
+def test_duplicate_choice_option_names(model: dict) -> None:
+    model["choices"]["yesno"][1]["name"] = "yes"
+    assert any("duplicate option name" in e for e in validate_model(model))

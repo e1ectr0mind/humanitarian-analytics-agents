@@ -10,6 +10,20 @@ AGGREGATIONS = {"count", "count_unique", "sum", "percent"}
 LANGS = ("uk", "en")
 REGISTRY_FILE = "indicators.yaml"
 
+INDICATOR_KEYS = {"code", "name", "definition", "target", "disaggregation", "source", "measure"}
+TARGET_KEYS = {"value", "unit"}
+MEASURE_KEYS = {"dataset", "aggregation", "field", "filter", "numerator", "denominator"}
+PART_KEYS = {"field", "filter"}
+
+
+def _check_unknown_keys(item: dict, allowed: set[str], where: str, errors: list[str]) -> None:
+    unknown = set(item.keys()) - allowed
+    if unknown:
+        errors.append(
+            f"{where}: unknown key(s) {sorted(unknown)}; supported: "
+            f"{', '.join(sorted(allowed))}"
+        )
+
 
 class RegistryError(ValueError):
     """Friendly, user-facing registry failure."""
@@ -33,6 +47,7 @@ def _validate_measure(measure: object, where: str, errors: list[str]) -> None:
     if not isinstance(measure, dict):
         errors.append(f"{where}: expected a mapping")
         return
+    _check_unknown_keys(measure, MEASURE_KEYS, where, errors)
     if not isinstance(measure.get("dataset"), str) or not measure["dataset"]:
         errors.append(f"{where}.dataset: expected a dataset name")
     aggregation = measure.get("aggregation")
@@ -47,6 +62,7 @@ def _validate_measure(measure: object, where: str, errors: list[str]) -> None:
             if not isinstance(block, dict):
                 errors.append(f"{where}.{part}: percent needs a mapping with a 'field'")
                 continue
+            _check_unknown_keys(block, PART_KEYS, f"{where}.{part}", errors)
             if not isinstance(block.get("field"), str) or not block["field"]:
                 errors.append(f"{where}.{part}.field: expected a column name")
             if block.get("filter") is not None and not isinstance(block["filter"], str):
@@ -73,6 +89,7 @@ def validate_registry(data: object) -> list[str]:
         if not isinstance(item, dict):
             errors.append(f"{where}: expected a mapping")
             continue
+        _check_unknown_keys(item, INDICATOR_KEYS, where, errors)
         code = item.get("code")
         if not isinstance(code, str) or not code.strip():
             errors.append(f"{where}.code: expected a non-empty string")
@@ -94,6 +111,7 @@ def validate_registry(data: object) -> list[str]:
             if not isinstance(target, dict):
                 errors.append(f"{where}.target: expected a mapping with 'value' and 'unit'")
             else:
+                _check_unknown_keys(target, TARGET_KEYS, f"{where}.target", errors)
                 value = target.get("value")
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     errors.append(f"{where}.target.value: expected a number")

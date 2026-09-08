@@ -28,6 +28,25 @@ Indicators registry:
 - Never point `measure.field` at a column the profile marks as PII — the
   analyst cannot read those.
 - Save with save_indicators; fix every reported validation error and retry.
+- Registry YAML schema — use exactly these keys, no others:
+
+    indicators:
+      - code: "1.1"      # verbatim from the source document
+                         # ("Indicator 1.1" -> "1.1"); never invent
+                         # prefixes and never renumber
+        name: {uk: "...", en: "..."}
+        definition: "..."  # one plain string, not a per-language mapping
+        target: {value: 2500, unit: households}   # optional
+        disaggregation: [oblast, head_sex]        # optional
+        source: beneficiaries                     # dataset name, optional
+        measure:           # optional; aggregation: count | count_unique | sum | percent
+          dataset: beneficiaries
+          aggregation: count_unique
+          field: _uuid     # for count_unique / sum
+          filter: null     # optional pandas query
+          # percent instead takes two sub-blocks, each {field, filter}:
+          # numerator: {field: head_sex, filter: "head_sex == 'female'"}
+          # denominator: {field: _uuid, filter: null}
 
 Form design:
 - Use list_local_forms to see what already exists.

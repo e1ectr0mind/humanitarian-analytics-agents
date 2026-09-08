@@ -129,3 +129,25 @@ def test_dict_aggregation_does_not_raise(data: dict) -> None:
 def test_non_dict_measure_does_not_raise(data: dict) -> None:
     data["indicators"][0]["measure"] = "count everything"
     assert any("measure" in e for e in validate_registry(data))
+
+
+def test_unknown_indicator_key_rejected(data: dict) -> None:
+    data["indicators"][0]["source_dataset"] = "beneficiaries"
+    assert any(
+        "indicators[0]" in e and "source_dataset" in e for e in validate_registry(data)
+    )
+
+
+def test_unknown_measure_key_rejected(data: dict) -> None:
+    data["indicators"][0]["measure"]["type"] = "count_distinct"
+    assert any("measure" in e and "'type'" in e for e in validate_registry(data))
+
+
+def test_unknown_percent_part_key_rejected(data: dict) -> None:
+    data["indicators"][1]["measure"]["numerator"] = {"field": "head_sex", "value": "female"}
+    assert any("numerator" in e and "'value'" in e for e in validate_registry(data))
+
+
+def test_unknown_target_key_rejected(data: dict) -> None:
+    data["indicators"][0]["target"]["baseline"] = 0
+    assert any("target" in e and "baseline" in e for e in validate_registry(data))

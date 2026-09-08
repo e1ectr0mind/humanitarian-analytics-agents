@@ -42,3 +42,15 @@ def test_designer_prompt_discipline() -> None:
         "read_indicators", "never fabricate", "upload",
     ):
         assert needle.lower() in DESIGNER_PROMPT.lower(), needle
+
+
+def test_designer_prompt_carries_registry_schema() -> None:
+    for needle in (
+        'code: "1.1"',
+        "verbatim",
+        "never invent",
+        "source: beneficiaries",
+        "count | count_unique | sum | percent",
+        "numerator",
+    ):
+        assert needle in DESIGNER_PROMPT, needle

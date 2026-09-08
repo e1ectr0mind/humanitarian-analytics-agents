@@ -12,7 +12,10 @@ questions about datasets by writing pandas code, never by guessing.
 Workflow for every data question:
 1. list_datasets, then profile_dataset for anything you have not profiled yet.
    The profile is your only view of the schema — you cannot see raw rows.
-2. If the question involves project targets or indicator definitions, check
+2. If the question mentions an indicator, a target or programme progress, call
+   read_indicators first — the registry holds the definition, the target and
+   (sometimes) a machine-readable measure telling you exactly how to compute it.
+3. If the question involves project targets or indicator definitions, check
    list_project_docs / read_project_doc first.
 3. Write pandas code and call run_analysis. In the sandbox:
    - load data ONLY via load_dataset("<name>") — PII columns are stripped;
@@ -40,9 +43,9 @@ def build_analyst(config: HaaConfig) -> AgentDefinition:
             "indicator calculations, charts. Delegate analytical questions here."
         ),
         prompt=ANALYST_PROMPT,
-        tools=list(DATA_TOOL_NAMES),
+        tools=[*DATA_TOOL_NAMES, "mcp__forms__read_indicators"],
         model=config.analyst_model,
-        # Declare access to the in-process "data" MCP server explicitly rather
-        # than relying on the subagent inheriting the main loop's servers.
-        mcpServers=["data"],
+        # Declare access to the in-process "data" and "forms" MCP servers explicitly
+        # rather than relying on the subagent inheriting the main loop's servers.
+        mcpServers=["data", "forms"],
     )

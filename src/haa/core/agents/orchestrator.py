@@ -14,6 +14,9 @@ Routing rules:
 - Analytical questions about datasets, indicators, numbers, or trends: delegate to
   the `analyst` subagent via the Task tool. Pass the user's question verbatim plus
   any relevant conversation context.
+- Requests about the indicators registry (extract indicators from documentation,
+  update or review them) or about designing/editing a survey form (XLSForm for
+  Kobo/Ona): delegate to the `designer` subagent.
 - Meta questions (what can you do, what data is loaded): you may answer directly,
   using list_datasets / list_project_docs if needed.
 

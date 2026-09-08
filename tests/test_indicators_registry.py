@@ -113,3 +113,19 @@ def test_parse_bad_yaml() -> None:
 
 def test_summarize(data: dict) -> None:
     assert summarize(data) == {"count": 2, "with_target": 2, "with_measure": 2}
+
+
+def test_unhashable_aggregation_does_not_raise(data: dict) -> None:
+    data["indicators"][0]["measure"]["aggregation"] = ["percent", "count"]
+    errors = validate_registry(data)  # must not raise
+    assert any("aggregation" in e for e in errors)
+
+
+def test_dict_aggregation_does_not_raise(data: dict) -> None:
+    data["indicators"][0]["measure"]["aggregation"] = {"a": 1}
+    assert any("aggregation" in e for e in validate_registry(data))
+
+
+def test_non_dict_measure_does_not_raise(data: dict) -> None:
+    data["indicators"][0]["measure"] = "count everything"
+    assert any("measure" in e for e in validate_registry(data))

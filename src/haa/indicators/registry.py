@@ -36,7 +36,7 @@ def _validate_measure(measure: object, where: str, errors: list[str]) -> None:
     if not isinstance(measure.get("dataset"), str) or not measure["dataset"]:
         errors.append(f"{where}.dataset: expected a dataset name")
     aggregation = measure.get("aggregation")
-    if aggregation not in AGGREGATIONS:
+    if not isinstance(aggregation, str) or aggregation not in AGGREGATIONS:
         errors.append(
             f"{where}.aggregation: unknown {aggregation!r}; allowed: "
             f"{', '.join(sorted(AGGREGATIONS))}"
@@ -51,7 +51,7 @@ def _validate_measure(measure: object, where: str, errors: list[str]) -> None:
                 errors.append(f"{where}.{part}.field: expected a column name")
             if block.get("filter") is not None and not isinstance(block["filter"], str):
                 errors.append(f"{where}.{part}.filter: expected a query string or null")
-    elif aggregation in {"count_unique", "sum"}:
+    elif isinstance(aggregation, str) and aggregation in {"count_unique", "sum"}:
         if not isinstance(measure.get("field"), str) or not measure["field"]:
             errors.append(f"{where}.field: expected a column name for {aggregation!r}")
     if measure.get("filter") is not None and not isinstance(measure["filter"], str):

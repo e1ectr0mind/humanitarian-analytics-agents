@@ -62,3 +62,15 @@ def test_reports_dir_created(tmp_path: Path) -> None:
     cfg = load_config(tmp_path)
     assert cfg.reports_dir == tmp_path.resolve() / "reports"
     assert cfg.reports_dir.is_dir()
+
+
+def test_designer_model_default_and_override(tmp_path: Path) -> None:
+    assert load_config(tmp_path).designer_model == "claude-opus-5"
+    (tmp_path / "config.toml").write_text('designer_model = "claude-sonnet-5"', encoding="utf-8")
+    assert load_config(tmp_path).designer_model == "claude-sonnet-5"
+
+
+def test_forms_dir_created(tmp_path: Path) -> None:
+    cfg = load_config(tmp_path)
+    assert cfg.forms_dir == tmp_path.resolve() / "forms"
+    assert cfg.forms_dir.is_dir()

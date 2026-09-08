@@ -18,6 +18,7 @@ class HaaConfig:
     orchestrator_model: str = "claude-opus-5"
     analyst_model: str = "claude-opus-5"
     cleaner_model: str = "claude-opus-5"
+    designer_model: str = "claude-opus-5"
     max_budget_usd: float = 2.0
     sandbox_timeout_s: int = 60
     output_limit_bytes: int = 32768
@@ -43,6 +44,10 @@ class HaaConfig:
     def reports_dir(self) -> Path:
         return self.workspace / "reports"
 
+    @property
+    def forms_dir(self) -> Path:
+        return self.workspace / "forms"
+
 
 _TUNABLE = {f.name for f in dataclasses.fields(HaaConfig)} - {"workspace"}
 
@@ -62,6 +67,13 @@ def load_config(workspace: Path, config_file: Path | None = None) -> HaaConfig:
         values = data
 
     cfg = HaaConfig(workspace=workspace, **values)  # type: ignore[arg-type]
-    for d in (cfg.data_dir, cfg.docs_dir, cfg.charts_dir, cfg.logs_dir, cfg.reports_dir):
+    for d in (
+        cfg.data_dir,
+        cfg.docs_dir,
+        cfg.charts_dir,
+        cfg.logs_dir,
+        cfg.reports_dir,
+        cfg.forms_dir,
+    ):
         d.mkdir(parents=True, exist_ok=True)
     return cfg

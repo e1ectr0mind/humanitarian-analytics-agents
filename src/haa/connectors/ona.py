@@ -8,6 +8,7 @@ import httpx
 
 from haa.connectors.base import (
     ConnectorError,
+    NotFoundError,
     PullResult,
     RemoteForm,
     get_json,
@@ -54,11 +55,19 @@ class OnaConnector:
         rows: list[dict] = []
         page = 1
         while page <= _MAX_PAGES:
-            batch = get_json(
-                self._client,
-                f"{self.base_url}/api/v1/data/{target.uid}",
-                params={"page": page, "page_size": self.page_size},
-            )
+            try:
+                batch = get_json(
+                    self._client,
+                    f"{self.base_url}/api/v1/data/{target.uid}",
+                    params={"page": page, "page_size": self.page_size},
+                )
+            except NotFoundError:
+                # Ona signals "past the last page" with HTTP 404, not an empty list.
+                if page == 1:
+                    raise ConnectorError(
+                        f"No data endpoint for form {target.name!r} (HTTP 404)."
+                    ) from None
+                break
             if not batch:
                 break
             rows.extend(batch)

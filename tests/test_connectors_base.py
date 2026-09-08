@@ -7,6 +7,7 @@ import respx
 
 from haa.connectors.base import (
     ConnectorError,
+    NotFoundError,
     ensure_row_ids,
     get_json,
     rows_to_dataframe,
@@ -94,3 +95,11 @@ def test_get_json_gives_up_with_friendly_error() -> None:
     respx.get("https://x.test/api").mock(side_effect=httpx.ConnectError("down"))
     with httpx.Client() as client, pytest.raises(ConnectorError, match="3 attempts"):
         get_json(client, "https://x.test/api")
+
+
+@respx.mock
+def test_get_json_404_no_retry() -> None:
+    route = respx.get("https://x.test/api").mock(return_value=httpx.Response(404))
+    with httpx.Client() as client, pytest.raises(NotFoundError, match="404"):
+        get_json(client, "https://x.test/api")
+    assert route.call_count == 1

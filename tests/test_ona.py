@@ -37,7 +37,7 @@ def test_pull_paginates(connector: OnaConnector, tmp_path: Path) -> None:
         side_effect=[
             httpx.Response(200, json=ROWS_P1),
             httpx.Response(200, json=ROWS_P2),
-            httpx.Response(200, json=[]),
+            httpx.Response(404),  # Ona signals past-the-end with 404, not []
         ]
     )
     result = connector.pull("hh_survey", tmp_path)
@@ -76,3 +76,26 @@ def test_context_manager() -> None:
     with OnaConnector(BASE, "tok") as c:
         c.list_forms()
     assert c._client.is_closed
+
+
+@respx.mock
+def test_pull_empty_page_still_terminates(connector: OnaConnector, tmp_path: Path) -> None:
+    respx.get(f"{BASE}/api/v1/forms").mock(return_value=httpx.Response(200, json=FORMS))
+    route = respx.get(f"{BASE}/api/v1/data/101").mock(
+        side_effect=[
+            httpx.Response(200, json=ROWS_P1),
+            httpx.Response(200, json=[]),
+        ]
+    )
+    result = connector.pull("hh_survey", tmp_path)
+    assert result.rows == 2
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_pull_404_on_first_page_is_an_error(connector: OnaConnector, tmp_path: Path) -> None:
+    respx.get(f"{BASE}/api/v1/forms").mock(return_value=httpx.Response(200, json=FORMS))
+    respx.get(f"{BASE}/api/v1/data/101").mock(return_value=httpx.Response(404))
+    with pytest.raises(ConnectorError, match="404"):
+        connector.pull("hh_survey", tmp_path)
+    assert not list(tmp_path.iterdir())

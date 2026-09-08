@@ -17,6 +17,10 @@ class ConnectorError(RuntimeError):
     """Friendly, user-facing connector failure."""
 
 
+class NotFoundError(ConnectorError):
+    """HTTP 404 — the resource (or a page past the end of data) does not exist."""
+
+
 @dataclass(frozen=True)
 class RemoteForm:
     uid: str
@@ -92,6 +96,8 @@ def get_json(client: httpx.Client, url: str, *, params: dict | None = None) -> o
                     f"Token rejected by the server (HTTP {resp.status_code}). "
                     "Refresh it with: haa connect <kind>"
                 )
+            if resp.status_code == 404:
+                raise NotFoundError(f"Not found (HTTP 404): {url}")
             resp.raise_for_status()
             return resp.json()
         except ConnectorError:

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+from pathlib import Path
+
 import yaml
 
 from haa.config import HaaConfig
@@ -68,12 +72,22 @@ class FormToolbox:
             self._failed_saves[name] = self._failed_saves.get(name, 0) + 1
             return "Model validation failed:\n" + "\n".join(f"- {e}" for e in errors)
 
-        render_xlsx(model, xlsx_path)
-        compile_errors = compile_check(xlsx_path)
-        if compile_errors:
-            xlsx_path.unlink(missing_ok=True)
-            self._failed_saves[name] = self._failed_saves.get(name, 0) + 1
-            return "pyxform rejected the form:\n" + "\n".join(f"- {e}" for e in compile_errors)
+        forms_dir = self.config.forms_dir
+        forms_dir.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(suffix=".xlsx", dir=str(forms_dir))
+        os.close(fd)
+        tmp_path = Path(tmp_name)
+        try:
+            render_xlsx(model, tmp_path)
+            compile_errors = compile_check(tmp_path)
+            if compile_errors:
+                self._failed_saves[name] = self._failed_saves.get(name, 0) + 1
+                return "pyxform rejected the form:\n" + "\n".join(
+                    f"- {e}" for e in compile_errors
+                )
+            os.replace(tmp_path, xlsx_path)  # atomic swap on the same filesystem
+        finally:
+            tmp_path.unlink(missing_ok=True)  # no-op after a successful replace
 
         save_model(self.config.forms_dir, name, model)
         questions = sum(1 for _ in iter_questions(model))

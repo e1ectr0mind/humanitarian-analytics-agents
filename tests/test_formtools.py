@@ -50,6 +50,33 @@ def test_save_form_reports_validation_errors_and_writes_nothing(box: FormToolbox
     assert not (box.config.forms_dir / "bad.xlsx").exists()
 
 
+def _breaking_edit() -> dict:
+    broken = copy.deepcopy(VALID_FORM)
+    broken["groups"][1]["questions"][0]["relevant"] = "${totally_bogus_field} = 'yes'"
+    return broken
+
+
+def test_compile_failure_is_reported_and_writes_nothing(box: FormToolbox) -> None:
+    out = box.save_form("fresh", _yaml(_breaking_edit()))
+    assert "pyxform" in out.lower() and "totally_bogus_field" in out
+    assert not (box.config.forms_dir / "fresh.form.yaml").exists()
+    assert not (box.config.forms_dir / "fresh.xlsx").exists()
+    assert not list(box.config.forms_dir.glob("*.xlsx"))  # no temp file left behind
+
+
+def test_failed_resave_keeps_previous_artifacts(box: FormToolbox) -> None:
+    assert "saved" in box.save_form("pdm", _yaml(VALID_FORM)).lower()
+    xlsx = box.config.forms_dir / "pdm.xlsx"
+    before = xlsx.read_bytes()
+
+    out = box.save_form("pdm", _yaml(_breaking_edit()))
+    assert "pyxform" in out.lower()
+    assert xlsx.exists(), "a rejected edit must not destroy the working XLSForm"
+    assert xlsx.read_bytes() == before
+    assert (box.config.forms_dir / "pdm.form.yaml").exists()
+    assert len(list(box.config.forms_dir.glob("*.xlsx"))) == 1  # no temp leftovers
+
+
 def test_save_form_bad_yaml_is_friendly(box: FormToolbox) -> None:
     out = box.save_form("pdm", "title: {uk: 'x'\n")
     assert "yaml" in out.lower() and "Traceback" not in out

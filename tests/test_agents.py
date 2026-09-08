@@ -31,7 +31,7 @@ def test_registry(tmp_path: Path) -> None:
 
 
 def test_prompts_carry_discipline() -> None:
-    for needle in ("never fabricate", "SADD", "load_dataset", "aggregat"):
+    for needle in ("never fabricate", "SADD", "load_dataset", "aggregat", "read_indicators"):
         assert needle.lower() in ANALYST_PROMPT.lower()
     for needle in ("delegate", "analyst", "honest", "cleaner", "pull", "designer"):
         assert needle.lower() in ORCHESTRATOR_PROMPT.lower()

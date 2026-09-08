@@ -127,6 +127,29 @@ def test_save_indicators_validation_error(box: FormToolbox) -> None:
     assert not (box.config.workspace / "indicators.yaml").exists()
 
 
+def test_save_form_write_failure_is_friendly(box: FormToolbox, monkeypatch) -> None:
+    import haa.core.tools.formtools as ft
+
+    def boom(*a, **kw):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(ft.os, "replace", boom)
+    out = box.save_form("pdm", _yaml(VALID_FORM))
+    assert "could not write" in out.lower() and "excel" in out.lower()
+    assert "Traceback" not in out
+
+
+def test_save_indicators_write_failure_is_friendly(box: FormToolbox, monkeypatch) -> None:
+    import haa.core.tools.formtools as ft
+
+    def boom(*a, **kw):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(ft, "save_registry", boom)
+    out = box.save_indicators(_yaml(VALID_REGISTRY))
+    assert "could not write" in out.lower() and "Traceback" not in out
+
+
 def test_build_forms_server_importable(box: FormToolbox) -> None:
     from haa.core.tools.formtools import build_forms_server
 

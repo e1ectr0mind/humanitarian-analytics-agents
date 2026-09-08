@@ -18,7 +18,11 @@ QUESTION_TYPES = {
     "select_multiple",
 }
 SELECT_TYPES = {"select_one", "select_multiple"}
-NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}$")
+NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}\Z")
+QUESTION_KEYS = {"name", "type", "list", "label", "required", "relevant", "constraint", "hint"}
+GROUP_KEYS = {"name", "label", "questions"}
+TOP_KEYS = {"title", "form_id", "groups", "choices"}
+CHOICE_KEYS = {"name", "label"}
 
 
 def _check_label(value: object, where: str, errors: list[str]) -> None:
@@ -52,6 +56,12 @@ def _validate_question(
         errors.append(f"{where}: expected a mapping")
         return None
     name = question.get("name")
+    unknown = set(question.keys()) - QUESTION_KEYS
+    if unknown:
+        errors.append(
+            f"{where} ({name!r}): unknown key(s) {sorted(unknown)}; supported: "
+            f"{', '.join(sorted(QUESTION_KEYS))}"
+        )
     _check_name(name, f"{where}.name", errors)
     qtype = question.get("type")
     if not isinstance(qtype, str) or qtype not in QUESTION_TYPES:
@@ -85,6 +95,12 @@ def validate_model(model: object) -> list[str]:
         return ["model: expected a mapping at the top level"]
 
     errors: list[str] = []
+    unknown_top = set(model.keys()) - TOP_KEYS
+    if unknown_top:
+        errors.append(
+            f"model: unknown key(s) {sorted(unknown_top)}; supported: "
+            f"{', '.join(sorted(TOP_KEYS))}"
+        )
     _check_label(model.get("title"), "title", errors)
     _check_name(model.get("form_id"), "form_id", errors)
 
@@ -108,6 +124,12 @@ def validate_model(model: object) -> list[str]:
         if not isinstance(group, dict):
             errors.append(f"{where}: expected a mapping")
             continue
+        unknown_group = set(group.keys()) - GROUP_KEYS
+        if unknown_group:
+            errors.append(
+                f"{where}: unknown key(s) {sorted(unknown_group)}; supported: "
+                f"{', '.join(sorted(GROUP_KEYS))}"
+            )
         _check_name(group.get("name"), f"{where}.name", errors)
         gname = group.get("name")
         if isinstance(gname, str):
@@ -140,6 +162,12 @@ def validate_model(model: object) -> list[str]:
             if not isinstance(option, dict):
                 errors.append(f"{where}[{oi}]: expected a mapping")
                 continue
+            unknown_choice = set(option.keys()) - CHOICE_KEYS
+            if unknown_choice:
+                errors.append(
+                    f"{where}[{oi}]: unknown key(s) {sorted(unknown_choice)}; supported: "
+                    f"{', '.join(sorted(CHOICE_KEYS))}"
+                )
             _check_name(option.get("name"), f"{where}[{oi}].name", errors)
             _check_label(option.get("label"), f"{where}[{oi}].label", errors)
             oname = option.get("name")

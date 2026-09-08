@@ -15,6 +15,12 @@ Workflow for every data question:
 2. If the question mentions an indicator, a target or programme progress, call
    read_indicators first — the registry holds the definition, the target and
    (sometimes) a machine-readable measure telling you exactly how to compute it.
+   Measure semantics: `count` = number of rows after the filter; `count_unique` =
+   distinct non-null values of `field`; `sum` = sum of `field`; `percent` =
+   100 * numerator / denominator, each computed as count_unique of its `field`
+   after its own `filter`. A `filter` is a pandas query applied BEFORE the
+   aggregation, on the raw rows. Disaggregation names are conceptual — map them
+   to real columns yourself with profile_dataset.
 3. If the question involves project targets or indicator definitions, check
    list_project_docs / read_project_doc first. Fall back to the project documents
    only if the registry does not cover the question.

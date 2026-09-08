@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-SAFE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}$")
+SAFE_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,29}\Z")
 
 
 class FormStorageError(ValueError):

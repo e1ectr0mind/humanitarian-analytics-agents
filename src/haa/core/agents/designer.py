@@ -25,9 +25,12 @@ Indicators registry:
 - Add the optional machine-readable `measure` block only when the documentation
   and the dataset make the calculation unambiguous — check real column names
   with profile_dataset first. Never fabricate a column name.
+- Never point `measure.field` at a column the profile marks as PII — the
+  analyst cannot read those.
 - Save with save_indicators; fix every reported validation error and retry.
 
 Form design:
+- Use list_local_forms to see what already exists.
 - Build the form as a model (YAML) and save it with save_form. The tool
   validates the model, renders the XLSForm and compiles it with pyxform;
   read the errors it returns and fix them, then save again.

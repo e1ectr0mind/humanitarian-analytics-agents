@@ -160,3 +160,18 @@ def test_duplicate_group_names(model: dict) -> None:
 def test_duplicate_choice_option_names(model: dict) -> None:
     model["choices"]["yesno"][1]["name"] = "yes"
     assert any("duplicate option name" in e for e in validate_model(model))
+
+
+def test_unknown_question_key_rejected(model: dict) -> None:
+    model["groups"][1]["questions"][1]["appearance"] = "minimal"
+    assert any("appearance" in e for e in validate_model(model))
+
+
+def test_unknown_top_level_key_rejected(model: dict) -> None:
+    model["settings"] = {"version": "1"}
+    assert any("settings" in e for e in validate_model(model))
+
+
+def test_unknown_group_key_rejected(model: dict) -> None:
+    model["groups"][0]["appearance"] = "field-list"
+    assert any("appearance" in e for e in validate_model(model))

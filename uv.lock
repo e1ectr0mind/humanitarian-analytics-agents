@@ -491,7 +491,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2" },
     { name = "pypdf", specifier = ">=4.0" },
     { name = "python-docx", specifier = ">=1.1" },
-    { name = "pyxform", specifier = ">=2.0" },
+    { name = "pyxform", specifier = ">=4.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.7" },
     { name = "tomli-w", specifier = ">=1.0" },

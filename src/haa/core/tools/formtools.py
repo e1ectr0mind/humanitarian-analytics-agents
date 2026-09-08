@@ -85,11 +85,19 @@ class FormToolbox:
                 return "pyxform rejected the form:\n" + "\n".join(
                     f"- {e}" for e in compile_errors
                 )
+            # Write the model file before swapping the xlsx into place, so a
+            # write failure can never pair a new workbook with a stale model.
+            save_model(self.config.forms_dir, name, model)
             os.replace(tmp_path, xlsx_path)  # atomic swap on the same filesystem
+        except OSError as exc:
+            self._failed_saves[name] = self._failed_saves.get(name, 0) + 1
+            return (
+                f"Could not write the form files: {exc.strerror or exc}. "
+                "If the .xlsx is open in Excel, close it and try again."
+            )
         finally:
             tmp_path.unlink(missing_ok=True)  # no-op after a successful replace
 
-        save_model(self.config.forms_dir, name, model)
         questions = sum(1 for _ in iter_questions(model))
         groups = len(model.get("groups") or [])
         attempts_failed = self._failed_saves.pop(name, 0)
@@ -124,7 +132,10 @@ class FormToolbox:
         errors = validate_registry(data)
         if errors:
             return "Registry validation failed:\n" + "\n".join(f"- {e}" for e in errors)
-        save_registry(self.config.workspace, data)
+        try:
+            save_registry(self.config.workspace, data)
+        except OSError as exc:
+            return f"Could not write the registry: {exc.strerror or exc}."
         stats = summarize(data)
         self.telemetry.log("indicators_saved", **stats)
         return (

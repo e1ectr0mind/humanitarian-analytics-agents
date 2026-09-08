@@ -61,12 +61,53 @@ async def test_duplicates_found(demo_workspace: Path, df: pd.DataFrame) -> None:
 
 
 async def test_indicator_progress_uses_logframe(demo_workspace: Path, df: pd.DataFrame) -> None:
-    answer = await _answer(
-        demo_workspace, "What is the target for Indicator 1.1 and what is our current progress?"
+    cfg = load_config(demo_workspace)
+
+    import yaml
+
+    from haa.indicators.registry import registry_path
+
+    registry_path(cfg.workspace).write_text(
+        yaml.safe_dump(
+            {
+                "indicators": [
+                    {
+                        "code": "1.1",
+                        "name": {"uk": "Домогосподарства", "en": "Households reached"},
+                        "definition": "Unique households with at least one service",
+                        "target": {"value": 2500, "unit": "households"},
+                        "source": "beneficiaries",
+                        "measure": {
+                            "dataset": "beneficiaries",
+                            "aggregation": "count_unique",
+                            "field": "_uuid",
+                            "filter": None,
+                        },
+                    }
+                ]
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
     )
+
+    async with AnalyticsSession(cfg) as session:
+        chunks = [
+            e.text
+            async for e in session.ask(
+                "What is the target for Indicator 1.1 and what is our current progress?"
+            )
+            if e.kind == "text"
+        ]
+    answer = "\n".join(chunks)
+
     nums = _numbers(answer)
     assert 2500 in nums                      # target read from logframe.md
     assert df["_uuid"].nunique() in nums     # reached, computed from data
+
+    log = session.telemetry.path.read_text(encoding="utf-8")
+    assert "mcp__forms__read_indicators" in log, "analyst did not consult the registry"
 
 
 async def test_chart_saved(demo_workspace: Path) -> None:

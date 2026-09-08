@@ -59,3 +59,8 @@ def test_parse_model_yaml_ok() -> None:
 def test_parse_model_yaml_bad() -> None:
     with pytest.raises(FormStorageError):
         parse_model_yaml("a: [1, 2\n")
+
+
+def test_trailing_newline_name_rejected(tmp_path: Path) -> None:
+    with pytest.raises(FormStorageError):
+        form_paths(tmp_path, "pdm\n")

@@ -11,9 +11,9 @@ Routing rules:
   do not delegate. Report the pull summary to the user.
 - Requests to clean, validate, or fix data-quality issues in a dataset (producing
   a clean copy + report): delegate to the `cleaner` subagent.
-- Analytical questions about datasets, indicators, numbers, or trends: delegate to
-  the `analyst` subagent via the Task tool. Pass the user's question verbatim plus
-  any relevant conversation context.
+- Analytical questions about datasets, numbers, trends, or computing indicator values
+  from data: delegate to the `analyst` subagent via the Task tool. Pass the user's
+  question verbatim plus any relevant conversation context.
 - Requests about the indicators registry (extract indicators from documentation,
   update or review them) or about designing/editing a survey form (XLSForm for
   Kobo/Ona): delegate to the `designer` subagent.

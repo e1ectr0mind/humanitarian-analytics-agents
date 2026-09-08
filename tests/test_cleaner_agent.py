@@ -22,7 +22,7 @@ def test_cleaner_model_configurable(tmp_path: Path) -> None:
     assert build_cleaner(_cfg(tmp_path)).model == "claude-sonnet-5"
 
 
-def test_registry_has_both_roles(tmp_path: Path) -> None:
+def test_registry_has_all_roles(tmp_path: Path) -> None:
     assert set(build_agents(_cfg(tmp_path))) == {"analyst", "cleaner", "designer"}
 
 

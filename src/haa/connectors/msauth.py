@@ -76,13 +76,17 @@ def _post(url: str, data: dict, timeout: float) -> dict:
     try:
         resp = httpx.post(url, data=data, timeout=timeout)
     except Exception as exc:
-        raise AuthError(f"Could not reach Microsoft sign-in: {exc}") from exc
+        raise AuthError(
+            f"Could not reach Microsoft sign-in: {exc}. Check your network and try again."
+        ) from exc
     try:
         return resp.json()
     except Exception as exc:
-        raise AuthError(
-            f"Microsoft sign-in returned a non-JSON response (HTTP {resp.status_code})."
-        ) from exc
+        msg = (
+            f"Microsoft sign-in returned a non-JSON response (HTTP {resp.status_code}). "
+            "Try again; if it persists, contact IT."
+        )
+        raise AuthError(msg) from exc
 
 
 def _friendly(data: dict) -> str:
@@ -93,6 +97,8 @@ def _friendly(data: dict) -> str:
             " — the tenant does not allow this application. Agree a client_id "
             "with IT/HQ or try the pre-consented default one."
         )
+    else:
+        message += " Try again; if it persists, share this message with IT/HQ."
     return message
 
 

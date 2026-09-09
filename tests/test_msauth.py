@@ -62,3 +62,15 @@ def test_start_device_flow_consent_error_has_hint() -> None:
     )
     with pytest.raises(AuthError, match="IT"):
         start_device_flow(TENANT, "cid-1")
+
+
+@respx.mock
+def test_non_consent_error_still_names_action() -> None:
+    respx.post(DEVICECODE_URL).mock(
+        return_value=httpx.Response(400, json={
+            "error": "invalid_request",
+            "error_description": "AADSTS90002: Tenant not found.",
+        })
+    )
+    with pytest.raises(AuthError, match="IT/HQ"):
+        start_device_flow(TENANT, "cid-1")

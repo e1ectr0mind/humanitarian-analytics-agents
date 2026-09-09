@@ -164,6 +164,35 @@ def test_msauth_refresh_telemetry_logged(sp_box: SourceToolbox) -> None:
     assert log.count('"kind": "msauth_refresh"') == 2
 
 
+def test_msauth_refresh_logged_even_when_operation_fails(tmp_path: Path, monkeypatch) -> None:
+    cfg = load_config(tmp_path)
+    import haa.core.tools.sourcetools as st
+
+    class FailingSharePoint:
+        def __init__(self) -> None:
+            self.refresh_events: list[bool] = []
+
+        def list_forms(self):
+            self.refresh_events.append(False)
+            raise ConnectorError(
+                "The Microsoft session has expired or was revoked. "
+                "Re-run: haa connect sharepoint"
+            )
+
+        def close(self) -> None:
+            pass
+
+    conn = Connection("imc-sp", "sharepoint", "https://x.sharepoint.com/sites/M",
+                      tenant="t", client_id="c")
+    monkeypatch.setattr(st, "load_connection", lambda ws, name: (conn, "tok"))
+    monkeypatch.setattr(st, "make_connector", lambda conn, token: FailingSharePoint())
+    box = SourceToolbox(cfg, SessionTelemetry(cfg.logs_dir / "t.jsonl"))
+    out = box.list_remote_forms("imc-sp")
+    assert "expired" in out and "Traceback" not in out
+    log = box.telemetry.path.read_text(encoding="utf-8")
+    assert '"kind": "msauth_refresh"' in log and "false" in log
+
+
 def test_connections_hint_mentions_sharepoint(tmp_path: Path, monkeypatch) -> None:
     cfg = load_config(tmp_path)
     import haa.core.tools.sourcetools as st

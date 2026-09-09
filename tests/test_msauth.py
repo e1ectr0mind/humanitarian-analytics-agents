@@ -11,6 +11,7 @@ from haa.connectors.msauth import (
     DeviceFlow,
     TokenSet,
     poll_for_token,
+    refresh,
     start_device_flow,
 )
 
@@ -116,3 +117,35 @@ def test_poll_declined_is_friendly() -> None:
 def test_poll_code_expired_before_use() -> None:
     with pytest.raises(AuthError, match="expired"):
         poll_for_token(_flow(expires_in=-1.0), sleep=lambda s: None)
+
+
+@respx.mock
+def test_refresh_rotates_refresh_token() -> None:
+    route = respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(200, json={
+            "access_token": "at-2", "refresh_token": "rt-2", "expires_in": 3600,
+        })
+    )
+    tokens = refresh(TENANT, "cid-1", "rt-1")
+    assert tokens.access_token == "at-2" and tokens.refresh_token == "rt-2"
+    body = route.calls[0].request.content.decode()
+    assert "grant_type=refresh_token" in body and "rt-1" in body
+
+
+@respx.mock
+def test_refresh_keeps_old_token_when_none_returned() -> None:
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(200, json={"access_token": "at-2", "expires_in": 3600})
+    )
+    assert refresh(TENANT, "cid-1", "rt-1").refresh_token == "rt-1"
+
+
+@respx.mock
+def test_refresh_invalid_grant_is_friendly() -> None:
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(400, json={
+            "error": "invalid_grant", "error_description": "AADSTS70000: expired.",
+        })
+    )
+    with pytest.raises(AuthError, match="haa connect sharepoint"):
+        refresh(TENANT, "cid-1", "rt-old")

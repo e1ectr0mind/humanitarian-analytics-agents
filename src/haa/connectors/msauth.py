@@ -147,3 +147,24 @@ def poll_for_token(flow: DeviceFlow, *, timeout: float = 30.0, sleep=time.sleep)
         else:
             raise AuthError(_friendly(data))
     raise AuthError("The sign-in code expired before it was used. Run: haa connect sharepoint")
+
+
+def refresh(tenant: str, client_id: str, refresh_token: str, *, timeout: float = 30.0) -> TokenSet:
+    data = _post(
+        _token_url(tenant),
+        {
+            "grant_type": "refresh_token",
+            "client_id": client_id,
+            "refresh_token": refresh_token,
+            "scope": SCOPES,
+        },
+        timeout,
+    )
+    if "access_token" not in data:
+        if data.get("error") == "invalid_grant":
+            raise AuthError(
+                "The Microsoft session has expired or was revoked. "
+                "Re-run: haa connect sharepoint"
+            )
+        raise AuthError(_friendly(data))
+    return _token_set(data, fallback_refresh=refresh_token)

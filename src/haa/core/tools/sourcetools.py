@@ -29,20 +29,39 @@ class SourceToolbox:
     def list_connections(self) -> str:
         conns = list_connections(self.config.workspace)
         if not conns:
-            return "No connections configured. Set one up with: haa connect kobo|ona"
+            return "No connections configured. Set one up with: haa connect kobo|ona|sharepoint"
         return "Configured connections:\n" + "\n".join(
             f"- {c.name} ({c.kind}, {c.base_url})" for c in conns
         )
 
+    def _log_refreshes(self, connection: str, connector: object) -> None:
+        events = getattr(connector, "refresh_events", [])
+        if events:
+            self.telemetry.log("msauth_refresh", connection=connection, results=list(events))
+
     def list_remote_forms(self, connection: str) -> str:
         try:
             conn, token = load_connection(self.config.workspace, connection)
-            with make_connector(conn, token) as connector:
+            connector = make_connector(conn, token)
+            try:
                 forms = connector.list_forms()
+            finally:
+                self._log_refreshes(connection, connector)
+                connector.close()
         except (ConnectorError, CredentialsError) as exc:
             return str(exc)
+        noun = "files" if conn.kind == "sharepoint" else "forms"
         if not forms:
-            return f"No forms found on {connection!r}."
+            return f"No {noun} found on {connection!r}."
+        if conn.kind == "sharepoint":
+            note = (
+                "\n(showing the first 200 tabular files — narrow --folder to see others)"
+                if getattr(connector, "list_truncated", False)
+                else ""
+            )
+            return f"Files on {connection!r}:\n" + "\n".join(
+                f"- {f.name}" for f in forms
+            ) + note
         return f"Forms on {connection!r}:\n" + "\n".join(
             f"- {f.name} (uid {f.uid}, "
             f"{f.submissions if f.submissions is not None else '?'} submissions)"
@@ -53,18 +72,27 @@ class SourceToolbox:
         started = time.monotonic()
         try:
             conn, token = load_connection(self.config.workspace, connection)
-            with make_connector(conn, token) as connector:
+            connector = make_connector(conn, token)
+            try:
                 result = connector.pull(form, self.config.data_dir)
+            finally:
+                self._log_refreshes(connection, connector)
+                connector.close()
         except (ConnectorError, CredentialsError) as exc:
             return str(exc)
         seconds = round(time.monotonic() - started, 1)
-        self.telemetry.log(
-            "pull",
-            connection=connection,
-            form=result.form.name,
-            rows=result.rows,
-            seconds=seconds,
-        )
+        payload = {"connection": connection, "form": result.form.name,
+                   "rows": result.rows, "seconds": seconds}
+        if result.bytes is not None:
+            payload["bytes"] = result.bytes
+        self.telemetry.log("pull", **payload)
+        if result.bytes is not None:
+            size_kb = max(1, round(result.bytes / 1024))
+            return (
+                f"Pulled {result.form.name!r} ({size_kb} KB) into {result.path.name} "
+                f"({seconds}s). "
+                "The dataset is now available to profile_dataset / run_analysis."
+            )
         return (
             f"Pulled {result.rows} submissions of {result.form.name!r} "
             f"into {result.path.name} ({seconds}s). "

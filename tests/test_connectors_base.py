@@ -6,8 +6,11 @@ import pytest
 import respx
 
 from haa.connectors.base import (
+    AuthRejectedError,
     ConnectorError,
     NotFoundError,
+    PullResult,
+    RemoteForm,
     ensure_row_ids,
     get_json,
     rows_to_dataframe,
@@ -103,3 +106,16 @@ def test_get_json_404_no_retry() -> None:
     with httpx.Client() as client, pytest.raises(NotFoundError, match="404"):
         get_json(client, "https://x.test/api")
     assert route.call_count == 1
+
+
+@respx.mock
+def test_get_json_auth_error_is_typed() -> None:
+    respx.get("https://x.test/a").mock(return_value=httpx.Response(401))
+    with pytest.raises(AuthRejectedError, match="haa connect"):
+        get_json(httpx.Client(), "https://x.test/a")
+
+
+def test_pull_result_bytes_optional(tmp_path: Path) -> None:
+    form = RemoteForm(uid="u", name="n")
+    assert PullResult(path=tmp_path / "x.xlsx", rows=1, form=form).bytes is None
+    assert PullResult(path=tmp_path / "x.xlsx", rows=0, form=form, bytes=2048).bytes == 2048

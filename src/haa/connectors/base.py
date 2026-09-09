@@ -21,6 +21,10 @@ class NotFoundError(ConnectorError):
     """HTTP 404 — the resource (or a page past the end of data) does not exist."""
 
 
+class AuthRejectedError(ConnectorError):
+    """HTTP 401/403 — the server rejected our credentials."""
+
+
 @dataclass(frozen=True)
 class RemoteForm:
     uid: str
@@ -33,6 +37,7 @@ class PullResult:
     path: Path
     rows: int
     form: RemoteForm
+    bytes: int | None = None
 
 
 class ODKConnector(Protocol):
@@ -92,7 +97,7 @@ def get_json(client: httpx.Client, url: str, *, params: dict | None = None) -> o
         try:
             resp = client.get(url, params=params)
             if resp.status_code in (401, 403):
-                raise ConnectorError(
+                raise AuthRejectedError(
                     f"Token rejected by the server (HTTP {resp.status_code}). "
                     "Refresh it with: haa connect <kind>"
                 )

@@ -140,6 +140,16 @@ def make_connector(conn: Connection, token: str):
         from haa.connectors.kobo import KoboConnector
 
         return KoboConnector(conn.base_url, token)
-    from haa.connectors.ona import OnaConnector
+    if conn.kind == "ona":
+        from haa.connectors.ona import OnaConnector
 
-    return OnaConnector(conn.base_url, token)
+        return OnaConnector(conn.base_url, token)
+    from haa.connectors.sharepoint import SharePointConnector
+
+    def _persist(tokens_json: str) -> None:
+        try:
+            keyring.set_password(KEYRING_SERVICE, conn.name, tokens_json)
+        except Exception:  # no backend / locked vault — rotation then lives in memory only
+            pass
+
+    return SharePointConnector(conn, token, on_tokens_updated=_persist)

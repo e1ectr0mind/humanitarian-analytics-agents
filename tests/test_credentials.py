@@ -10,6 +10,7 @@ from haa.connectors.credentials import (
     env_var_name,
     list_connections,
     load_connection,
+    make_connector,
     save_connection,
 )
 
@@ -162,3 +163,36 @@ def test_kobo_connection_unaffected_by_new_fields(tmp_path: Path) -> None:
     save_connection(tmp_path, CONN, "t")
     loaded, _ = load_connection(tmp_path, "imc-kobo")
     assert loaded.tenant is None and loaded.client_id is None and loaded.folder is None
+
+
+def test_make_connector_sharepoint(tmp_path: Path, mem_keyring) -> None:
+    import time
+
+    from haa.connectors.msauth import TokenSet
+    from haa.connectors.sharepoint import SharePointConnector
+
+    save_connection(tmp_path, SP, TokenSet("at", "rt", time.time() + 3600).to_json())
+    conn, token = load_connection(tmp_path, "imc-sp")
+    connector = make_connector(conn, token)
+    assert isinstance(connector, SharePointConnector)
+    connector._on_tokens_updated('{"rotated": "tokens"}')
+    assert mem_keyring.store[("haa", "imc-sp")] == '{"rotated": "tokens"}'
+
+
+def test_make_connector_sharepoint_survives_keyring_failure(
+    tmp_path: Path, mem_keyring, monkeypatch
+) -> None:
+    import time
+
+    import keyring
+
+    from haa.connectors.msauth import TokenSet
+
+    save_connection(tmp_path, SP, TokenSet("at", "rt", time.time() + 3600).to_json())
+    conn, token = load_connection(tmp_path, "imc-sp")
+    connector = make_connector(conn, token)
+    monkeypatch.setattr(
+        keyring, "set_password",
+        lambda *a: (_ for _ in ()).throw(RuntimeError("vault locked")),
+    )
+    connector._on_tokens_updated('{"rotated": "tokens"}')  # must not raise

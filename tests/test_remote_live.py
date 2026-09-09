@@ -43,3 +43,18 @@ def test_ona_live_roundtrip(tmp_path: Path) -> None:
     result = OnaConnector(url, token).pull(with_data[0].uid, tmp_path)
     assert result.path.exists()
     assert result.rows == with_data[0].submissions, (result.rows, with_data[0].submissions)
+
+
+def test_sharepoint_live_roundtrip(tmp_path: Path) -> None:
+    workspace, profile = _env("HAA_TEST_SP_WORKSPACE", "HAA_TEST_SP_PROFILE")
+    from haa.connectors.credentials import load_connection, make_connector
+
+    conn, token = load_connection(Path(workspace), profile)
+    with make_connector(conn, token) as connector:
+        files = connector.list_forms()
+        assert isinstance(files, list)
+        if not files:
+            pytest.skip("no tabular files visible to this profile")
+        result = connector.pull(files[0].name, tmp_path)
+    assert result.path.exists()
+    assert result.path.stat().st_size == result.bytes > 0

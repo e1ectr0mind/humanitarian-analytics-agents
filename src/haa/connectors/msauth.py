@@ -127,3 +127,23 @@ def start_device_flow(tenant: str, client_id: str, *, timeout: float = 30.0) -> 
         interval=int(data.get("interval", 5)),
         expires_at=time.time() + float(data.get("expires_in", 900)),
     )
+
+
+def poll_for_token(flow: DeviceFlow, *, timeout: float = 30.0, sleep=time.sleep) -> TokenSet:
+    payload = {
+        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+        "client_id": flow.client_id,
+        "device_code": flow.device_code,
+    }
+    while time.time() < flow.expires_at:
+        data = _post(_token_url(flow.tenant), payload, timeout)
+        if "access_token" in data:
+            return _token_set(data, fallback_refresh="")
+        error = data.get("error", "")
+        if error == "authorization_pending":
+            sleep(flow.interval)
+        elif error == "slow_down":
+            sleep(flow.interval + 5)
+        else:
+            raise AuthError(_friendly(data))
+    raise AuthError("The sign-in code expired before it was used. Run: haa connect sharepoint")

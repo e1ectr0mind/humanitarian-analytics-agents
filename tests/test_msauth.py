@@ -8,7 +8,9 @@ from haa.connectors.base import ConnectorError
 from haa.connectors.msauth import (
     LOGIN_BASE,
     AuthError,
+    DeviceFlow,
     TokenSet,
+    poll_for_token,
     start_device_flow,
 )
 
@@ -74,3 +76,43 @@ def test_non_consent_error_still_names_action() -> None:
     )
     with pytest.raises(AuthError, match="IT/HQ"):
         start_device_flow(TENANT, "cid-1")
+
+
+def _flow(expires_in: float = 60.0) -> DeviceFlow:
+    return DeviceFlow(
+        tenant=TENANT, client_id="cid-1", device_code="dc-1", user_code="ABC123",
+        verification_uri="https://microsoft.com/devicelogin", interval=5,
+        expires_at=time.time() + expires_in,
+    )
+
+
+@respx.mock
+def test_poll_pending_then_slow_down_then_success() -> None:
+    respx.post(TOKEN_URL).mock(side_effect=[
+        httpx.Response(400, json={"error": "authorization_pending"}),
+        httpx.Response(400, json={"error": "slow_down"}),
+        httpx.Response(200, json={
+            "access_token": "at-1", "refresh_token": "rt-1", "expires_in": 3600,
+        }),
+    ])
+    naps: list[int] = []
+    tokens = poll_for_token(_flow(), sleep=naps.append)
+    assert tokens.access_token == "at-1" and tokens.refresh_token == "rt-1"
+    assert naps == [5, 10]  # interval, then interval + 5 on slow_down
+
+
+@respx.mock
+def test_poll_declined_is_friendly() -> None:
+    respx.post(TOKEN_URL).mock(
+        return_value=httpx.Response(400, json={
+            "error": "authorization_declined",
+            "error_description": "AADSTS65004: User declined to consent.",
+        })
+    )
+    with pytest.raises(AuthError, match="declined"):
+        poll_for_token(_flow(), sleep=lambda s: None)
+
+
+def test_poll_code_expired_before_use() -> None:
+    with pytest.raises(AuthError, match="expired"):
+        poll_for_token(_flow(expires_in=-1.0), sleep=lambda s: None)

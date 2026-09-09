@@ -90,3 +90,34 @@ def test_run_connect_sharepoint_saves_tokens(tmp_path: Path, monkeypatch) -> Non
     assert "refresh-SECRET2" in store[("haa", "imc-sp")]
     toml_text = (tmp_path / "connections.toml").read_text(encoding="utf-8")
     assert "sharepoint" in toml_text and "SECRET" not in toml_text
+
+
+def test_connect_sharepoint_keyring_failure_is_friendly(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    import time
+
+    import keyring
+
+    import haa.cli.app as app
+    from haa.connectors.msauth import DeviceFlow, TokenSet
+
+    monkeypatch.setattr("sys.argv", [
+        "haa", "connect", "sharepoint", "--workspace", str(tmp_path),
+        "--site", "onedrive", "--tenant", "t", "--client-id", "c",
+    ])
+    monkeypatch.setattr("builtins.input", lambda prompt="": "sp")
+    flow = DeviceFlow(tenant="t", client_id="c", device_code="d", user_code="ABC",
+                      verification_uri="https://microsoft.com/devicelogin", interval=1,
+                      expires_at=time.time() + 60)
+    monkeypatch.setattr("haa.connectors.msauth.start_device_flow", lambda t, c: flow)
+    monkeypatch.setattr("haa.connectors.msauth.poll_for_token",
+                        lambda f: TokenSet("a", "r", time.time() + 3600))
+
+    def boom(*args):
+        raise RuntimeError("vault locked")
+
+    monkeypatch.setattr(keyring, "set_password", boom)
+    assert app.main() == 1
+    out = capsys.readouterr().out
+    assert "HAA_TOKEN_SP" in out and "Traceback" not in out

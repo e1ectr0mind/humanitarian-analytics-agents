@@ -162,6 +162,7 @@ def main() -> int:
         name = input(f"Profile name [{args.kind}]: ").strip() or args.kind
         if args.kind == "sharepoint":
             from haa.connectors.base import ConnectorError
+            from haa.connectors.credentials import CredentialsError
             from haa.connectors.msauth import DEFAULT_CLIENT_ID
 
             site = args.site or input("Site URL (or 'onedrive'): ").strip()
@@ -175,7 +176,7 @@ def main() -> int:
             except KeyboardInterrupt:
                 console.print("[red]Sign-in aborted.[/red]")
                 return 1
-            except ConnectorError as exc:
+            except (ConnectorError, CredentialsError) as exc:
                 console.print(f"[red]{exc}[/red]")
                 return 1
             return 0

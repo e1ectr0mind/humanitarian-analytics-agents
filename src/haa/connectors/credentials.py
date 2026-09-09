@@ -13,7 +13,8 @@ import keyring
 import tomli_w
 
 KEYRING_SERVICE = "haa"
-VALID_KINDS = ("kobo", "ona")
+VALID_KINDS = ("kobo", "ona", "sharepoint")
+_EXTRA_FIELDS = ("tenant", "client_id", "folder")
 
 
 class CredentialsError(ValueError):
@@ -25,6 +26,9 @@ class Connection:
     name: str
     kind: str
     base_url: str
+    tenant: str | None = None
+    client_id: str | None = None
+    folder: str | None = None
 
 
 def _toml_path(workspace: Path) -> Path:
@@ -51,6 +55,11 @@ def env_var_name(profile: str) -> str:
 def save_connection(workspace: Path, conn: Connection, token: str) -> None:
     if conn.kind not in VALID_KINDS:
         raise CredentialsError(f"Unknown connection kind {conn.kind!r}; use one of {VALID_KINDS}")
+    if conn.kind == "sharepoint" and not (conn.tenant and conn.client_id):
+        raise CredentialsError(
+            "A sharepoint connection needs both tenant and client_id. "
+            "Re-run: haa connect sharepoint"
+        )
     parts = urlsplit(conn.base_url)
     if parts.username or parts.password:
         host = parts.hostname or ""
@@ -60,6 +69,9 @@ def save_connection(workspace: Path, conn: Connection, token: str) -> None:
             conn.name,
             conn.kind,
             urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment)),
+            tenant=conn.tenant,
+            client_id=conn.client_id,
+            folder=conn.folder,
         )
     try:
         keyring.set_password(KEYRING_SERVICE, conn.name, token)
@@ -69,13 +81,22 @@ def save_connection(workspace: Path, conn: Connection, token: str) -> None:
             f"Set {env_var_name(conn.name)} instead, then re-run haa connect."
         ) from exc
     data = _read_all(workspace)
-    data[conn.name] = {"kind": conn.kind, "base_url": conn.base_url.rstrip("/")}
+    meta: dict[str, str] = {"kind": conn.kind, "base_url": conn.base_url.rstrip("/")}
+    for key in _EXTRA_FIELDS:
+        value = getattr(conn, key)
+        if value:
+            meta[key] = value
+    data[conn.name] = meta
     _write_all(workspace, data)
 
 
 def list_connections(workspace: Path) -> list[Connection]:
     return [
-        Connection(name=name, kind=meta["kind"], base_url=meta["base_url"])
+        Connection(
+            name=name, kind=meta["kind"], base_url=meta["base_url"],
+            tenant=meta.get("tenant"), client_id=meta.get("client_id"),
+            folder=meta.get("folder"),
+        )
         for name, meta in sorted(_read_all(workspace).items())
     ]
 
@@ -85,7 +106,12 @@ def load_connection(workspace: Path, name: str) -> tuple[Connection, str]:
     if name not in data:
         known = ", ".join(sorted(data)) or "(none)"
         raise CredentialsError(f"Unknown connection {name!r}. Known: {known}")
-    conn = Connection(name=name, kind=data[name]["kind"], base_url=data[name]["base_url"])
+    meta = data[name]
+    conn = Connection(
+        name=name, kind=meta["kind"], base_url=meta["base_url"],
+        tenant=meta.get("tenant"), client_id=meta.get("client_id"),
+        folder=meta.get("folder"),
+    )
     try:
         token = keyring.get_password(KEYRING_SERVICE, name)
     except Exception:  # no backend / locked vault / access denied

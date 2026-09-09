@@ -86,7 +86,7 @@ def test_list_and_delete(tmp_path: Path, mem_keyring) -> None:
 
 def test_invalid_kind_rejected(tmp_path: Path) -> None:
     with pytest.raises(CredentialsError, match="kind"):
-        save_connection(tmp_path, Connection("x", "sharepoint", "https://x"), "t")
+        save_connection(tmp_path, Connection("x", "dropbox", "https://x"), "t")
 
 
 def test_env_var_name() -> None:
@@ -128,3 +128,37 @@ def test_base_url_userinfo_stripped(tmp_path: Path) -> None:
     assert "secret-tok" not in text
     loaded, _ = load_connection(tmp_path, "imc-kobo2")
     assert loaded.base_url == "https://kf.example.org"
+
+
+SP = Connection(
+    name="imc-sp", kind="sharepoint",
+    base_url="https://contoso.sharepoint.com/sites/MEAL",
+    tenant="contoso.onmicrosoft.com", client_id="cid-123",
+    folder="Shared Documents/5W",
+)
+
+
+def test_sharepoint_roundtrip_with_extra_fields(tmp_path: Path) -> None:
+    save_connection(tmp_path, SP, '{"access_token": "a"}')
+    conn, token = load_connection(tmp_path, "imc-sp")
+    assert conn == SP and token == '{"access_token": "a"}'
+    text = (tmp_path / "connections.toml").read_text(encoding="utf-8")
+    assert "contoso.onmicrosoft.com" in text and "access_token" not in text
+
+
+def test_sharepoint_requires_tenant_and_client_id(tmp_path: Path) -> None:
+    with pytest.raises(CredentialsError, match="tenant"):
+        save_connection(tmp_path, Connection("x", "sharepoint", "onedrive"), "t")
+
+
+def test_onedrive_base_url_survives(tmp_path: Path) -> None:
+    conn = Connection("od", "sharepoint", "onedrive", tenant="t", client_id="c")
+    save_connection(tmp_path, conn, "tok")
+    loaded, _ = load_connection(tmp_path, "od")
+    assert loaded.base_url == "onedrive" and loaded.folder is None
+
+
+def test_kobo_connection_unaffected_by_new_fields(tmp_path: Path) -> None:
+    save_connection(tmp_path, CONN, "t")
+    loaded, _ = load_connection(tmp_path, "imc-kobo")
+    assert loaded.tenant is None and loaded.client_id is None and loaded.folder is None

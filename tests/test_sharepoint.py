@@ -1,3 +1,4 @@
+import base64
 import time
 
 import httpx
@@ -202,3 +203,108 @@ def test_list_missing_folder_is_friendly() -> None:
                       tenant=TENANT, client_id="cid", folder="nope")
     with pytest.raises(ConnectorError, match="'nope' not found"):
         SharePointConnector(conn, _token_json()).list_forms()
+
+
+PAYLOAD = b"PK\x03\x04 not a real xlsx but bytes that must survive verbatim \xd0\xaf"
+
+
+@respx.mock
+def test_pull_by_path_writes_bytes_verbatim(tmp_path) -> None:
+    c = _drive_ready()
+    respx.get(f"{GRAPH}/drives/drv-me/root:/2026/june_5w.xlsx").mock(
+        return_value=httpx.Response(200, json=_item("june_5w.xlsx", "f-1"))
+    )
+    respx.get(f"{GRAPH}/drives/drv-me/items/f-1/content").mock(
+        return_value=httpx.Response(200, content=PAYLOAD)
+    )
+    result = c.pull("2026/june_5w.xlsx", tmp_path)
+    assert result.path.read_bytes() == PAYLOAD
+    assert result.path.name == "june_5w.xlsx"
+    assert result.bytes == len(PAYLOAD) and result.rows == 0
+    assert result.form.uid == "f-1" and result.form.name == "june_5w.xlsx"
+
+
+@respx.mock
+def test_pull_by_item_id(tmp_path) -> None:
+    c = _drive_ready()
+    respx.get(f"{GRAPH}/drives/drv-me/items/f9").mock(
+        return_value=httpx.Response(200, json=_item("data.csv", "f9"))
+    )
+    respx.get(f"{GRAPH}/drives/drv-me/items/f9/content").mock(
+        return_value=httpx.Response(200, content=b"a,b\n1,2\n")
+    )
+    assert c.pull("f9", tmp_path).path.name == "data.csv"
+
+
+@respx.mock
+def test_pull_by_link_uses_shares_api(tmp_path) -> None:
+    c = _drive_ready()
+    link = "https://contoso.sharepoint.com/:x:/s/MEAL/EbCdE?e=abc"
+    encoded = "u!" + base64.urlsafe_b64encode(link.encode()).decode().rstrip("=")
+    item = _item("ext.csv", "f-x")
+    item["parentReference"] = {"driveId": "drv-other"}
+    respx.get(f"{GRAPH}/shares/{encoded}/driveItem").mock(
+        return_value=httpx.Response(200, json=item)
+    )
+    respx.get(f"{GRAPH}/drives/drv-other/items/f-x/content").mock(
+        return_value=httpx.Response(200, content=b"x")
+    )
+    result = c.pull(link, tmp_path)
+    assert result.path.read_bytes() == b"x" and result.form.name == "ext.csv"
+
+
+@respx.mock
+def test_pull_bad_link_is_friendly(tmp_path) -> None:
+    c = _drive_ready()
+    respx.get(url__startswith=f"{GRAPH}/shares/").mock(return_value=httpx.Response(404))
+    with pytest.raises(ConnectorError, match="did not resolve"):
+        c.pull("https://contoso.sharepoint.com/:x:/s/MEAL/broken", tmp_path)
+
+
+@respx.mock
+def test_pull_link_to_folder_rejected(tmp_path) -> None:
+    c = _drive_ready()
+    respx.get(url__startswith=f"{GRAPH}/shares/").mock(
+        return_value=httpx.Response(200, json=_item("Reports", "fld-9", folder=True))
+    )
+    with pytest.raises(ConnectorError, match="folder, not a file"):
+        c.pull("https://contoso.sharepoint.com/:f:/s/MEAL/folderlink", tmp_path)
+
+
+@respx.mock
+def test_pull_non_tabular_rejected(tmp_path) -> None:
+    c = _drive_ready()
+    respx.get(f"{GRAPH}/drives/drv-me/root:/report.docx").mock(
+        return_value=httpx.Response(200, json=_item("report.docx", "f-d"))
+    )
+    with pytest.raises(ConnectorError, match=".xlsx, .csv"):
+        c.pull("report.docx", tmp_path)
+    assert not list(tmp_path.iterdir())
+
+
+@respx.mock
+def test_pull_missing_path_lists_available(tmp_path) -> None:
+    c = _drive_ready()
+    respx.get(f"{GRAPH}/drives/drv-me/root:/missing.xlsx").mock(
+        return_value=httpx.Response(404)
+    )
+    respx.get(f"{GRAPH}/drives/drv-me/root/children").mock(
+        return_value=httpx.Response(200, json={"value": [_item("real.xlsx", "f-1")]})
+    )
+    with pytest.raises(ConnectorError, match="real.xlsx"):
+        c.pull("missing.xlsx", tmp_path)
+
+
+@respx.mock
+def test_pull_path_prefixed_with_pinned_folder(tmp_path) -> None:
+    respx.get(f"{GRAPH}/me/drive").mock(return_value=httpx.Response(200, json={"id": "drv-me"}))
+    route = respx.get(f"{GRAPH}/drives/drv-me/root:/5W/june.csv").mock(
+        return_value=httpx.Response(200, json=_item("june.csv", "f-1"))
+    )
+    respx.get(f"{GRAPH}/drives/drv-me/items/f-1/content").mock(
+        return_value=httpx.Response(200, content=b"x")
+    )
+    conn = Connection(name="od", kind="sharepoint", base_url="onedrive",
+                      tenant=TENANT, client_id="cid", folder="5W")
+    SharePointConnector(conn, _token_json()).pull("june.csv", tmp_path)
+    assert route.called

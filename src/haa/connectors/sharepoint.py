@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
+from pathlib import Path
 from urllib.parse import quote, urlsplit
 
 import httpx
@@ -11,8 +13,10 @@ from haa.connectors.base import (
     AuthRejectedError,
     ConnectorError,
     NotFoundError,
+    PullResult,
     RemoteForm,
     get_json,
+    safe_filename,
 )
 from haa.connectors.credentials import Connection
 from haa.connectors.msauth import TokenSet, refresh
@@ -138,6 +142,49 @@ class SharePointConnector:
                             return files
                 page = data.get("@odata.nextLink")
         return files
+
+    def _resolve(self, ref: str) -> tuple[dict, str]:
+        """Return (item metadata, content URL) for a path, item id, or https link."""
+        if ref.startswith("https://"):
+            encoded = "u!" + base64.urlsafe_b64encode(ref.encode()).decode().rstrip("=")
+            try:
+                item = self._get(f"{GRAPH}/shares/{encoded}/driveItem")
+            except NotFoundError:
+                raise ConnectorError(
+                    "The link did not resolve to a file — check that you have "
+                    "access and that it points to a file, not a folder."
+                ) from None
+            if "folder" in item:
+                raise ConnectorError("The link points to a folder, not a file.")
+            drive_id = item["parentReference"]["driveId"]
+            return item, f"{GRAPH}/drives/{drive_id}/items/{item['id']}/content"
+        drive = self._drive()
+        if "/" in ref or "." in ref:
+            full = f"{self.conn.folder}/{ref}" if self.conn.folder else ref
+            url = f"{drive}/root:/{quote(full)}"
+        else:
+            url = f"{drive}/items/{ref}"
+        try:
+            item = self._get(url)
+        except NotFoundError:
+            known = ", ".join(f.name for f in self.list_forms()) or "(none)"
+            raise ConnectorError(f"File {ref!r} not found. Available: {known}") from None
+        return item, f"{drive}/items/{item['id']}/content"
+
+    def pull(self, form: str, dest_dir: Path) -> PullResult:
+        item, content_url = self._resolve(form)
+        name = str(item["name"])
+        ext = Path(name).suffix.lower()
+        if ext not in TABULAR_EXTENSIONS:
+            raise ConnectorError(
+                f"{name!r} is not a tabular file; supported: .xlsx, .csv"
+            )
+        content = self._download(content_url)
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        path = dest_dir / f"{safe_filename(Path(name).stem)}{ext}"
+        path.write_bytes(content)
+        remote = RemoteForm(uid=str(item["id"]), name=name, submissions=None)
+        return PullResult(path=path, rows=0, form=remote, bytes=len(content))
 
     def close(self) -> None:
         self._client.close()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import httpx
 
@@ -11,6 +11,7 @@ from haa.connectors.base import (
     AuthRejectedError,
     ConnectorError,
     NotFoundError,
+    RemoteForm,
     get_json,
 )
 from haa.connectors.credentials import Connection
@@ -105,6 +106,38 @@ class SharePointConnector:
                 info = self._get(f"{GRAPH}/sites/{site['id']}/drive")
             self._drive_id = info["id"]
         return f"{GRAPH}/drives/{self._drive_id}"
+
+    def _children_url(self, drive: str, folder: str | None) -> str:
+        if folder:
+            return f"{drive}/root:/{quote(folder)}:/children"
+        return f"{drive}/root/children"
+
+    def list_forms(self) -> list[RemoteForm]:
+        drive = self._drive()
+        self.list_truncated = False
+        files: list[RemoteForm] = []
+        queue: list[tuple[str, str]] = [(self._children_url(drive, self.conn.folder), "")]
+        while queue:
+            url, prefix = queue.pop(0)
+            page: str | None = url
+            while page:
+                try:
+                    data = self._get(page)
+                except NotFoundError:
+                    raise ConnectorError(
+                        f"Folder {self.conn.folder!r} not found on {self.conn.base_url}."
+                    ) from None
+                for item in data.get("value", []):
+                    rel = f"{prefix}{item['name']}"
+                    if "folder" in item:
+                        queue.append((f"{drive}/items/{item['id']}/children", f"{rel}/"))
+                    elif rel.lower().endswith(TABULAR_EXTENSIONS):
+                        files.append(RemoteForm(uid=item["id"], name=rel, submissions=None))
+                        if len(files) >= MAX_FILES:
+                            self.list_truncated = True
+                            return files
+                page = data.get("@odata.nextLink")
+        return files
 
     def close(self) -> None:
         self._client.close()

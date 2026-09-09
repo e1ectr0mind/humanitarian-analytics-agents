@@ -48,3 +48,45 @@ def test_run_connect_saves_profile(tmp_path: Path, monkeypatch) -> None:
 def test_run_pull_friendly_on_missing_profile(tmp_path: Path) -> None:
     out = run_pull(tmp_path, "ghost", "form")
     assert "Unknown connection" in out
+
+
+def test_parser_connect_sharepoint() -> None:
+    a = build_parser().parse_args([
+        "connect", "sharepoint",
+        "--site", "https://x.sharepoint.com/sites/M",
+        "--tenant", "x.onmicrosoft.com",
+        "--client-id", "cid-1",
+        "--folder", "Shared Documents/5W",
+    ])
+    assert a.kind == "sharepoint" and a.site == "https://x.sharepoint.com/sites/M"
+    assert a.tenant == "x.onmicrosoft.com" and a.client_id == "cid-1"
+    assert a.folder == "Shared Documents/5W"
+
+
+def test_run_connect_sharepoint_saves_tokens(tmp_path: Path, monkeypatch) -> None:
+    import time
+
+    import keyring
+
+    from haa.cli.app import run_connect_sharepoint
+    from haa.connectors.msauth import DeviceFlow, TokenSet
+
+    store: dict[tuple[str, str], str] = {}
+    monkeypatch.setattr(keyring, "set_password", lambda s, u, p: store.__setitem__((s, u), p))
+    flow = DeviceFlow(tenant="t", client_id="c", device_code="dc", user_code="ABC123",
+                      verification_uri="https://microsoft.com/devicelogin", interval=1,
+                      expires_at=time.time() + 60)
+    monkeypatch.setattr("haa.connectors.msauth.start_device_flow", lambda t, c: flow)
+    monkeypatch.setattr(
+        "haa.connectors.msauth.poll_for_token",
+        lambda f: TokenSet("access-SECRET1", "refresh-SECRET2", time.time() + 3600),
+    )
+    said: list[str] = []
+    msg = run_connect_sharepoint(
+        tmp_path, "imc-sp", "onedrive", "t", "c", None, said.append
+    )
+    assert "imc-sp" in msg
+    assert any("ABC123" in line for line in said)
+    assert "refresh-SECRET2" in store[("haa", "imc-sp")]
+    toml_text = (tmp_path / "connections.toml").read_text(encoding="utf-8")
+    assert "sharepoint" in toml_text and "SECRET" not in toml_text

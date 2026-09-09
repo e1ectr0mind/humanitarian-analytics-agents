@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import getpass
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from rich.console import Console
@@ -23,6 +24,32 @@ def run_connect(workspace: Path, kind: str, name: str, base_url: str, token: str
     workspace.mkdir(parents=True, exist_ok=True)
     save_connection(workspace, Connection(name=name, kind=kind, base_url=base_url), token)
     return f"Connection {name!r} ({kind}) saved. Token stored in the OS credential store."
+
+
+def run_connect_sharepoint(
+    workspace: Path,
+    name: str,
+    site: str,
+    tenant: str,
+    client_id: str,
+    folder: str | None,
+    say: Callable[[str], None],
+) -> str:
+    from haa.connectors import msauth
+    from haa.connectors.credentials import Connection, save_connection
+
+    flow = msauth.start_device_flow(tenant, client_id)
+    say(f"Open {flow.verification_uri} and enter the code: {flow.user_code}")
+    say("Waiting for the sign-in to finish (Ctrl+C to abort)...")
+    tokens = msauth.poll_for_token(flow)
+    workspace.mkdir(parents=True, exist_ok=True)
+    save_connection(
+        workspace,
+        Connection(name=name, kind="sharepoint", base_url=site,
+                   tenant=tenant, client_id=client_id, folder=folder),
+        tokens.to_json(),
+    )
+    return f"Connection {name!r} (sharepoint) saved. Tokens stored in the OS credential store."
 
 
 def run_pull(workspace: Path, profile: str, form: str) -> str:
@@ -53,8 +80,15 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--workspace", type=Path, default=Path("workspace"))
 
     connect = sub.add_parser("connect", help="Configure a data-source connection")
-    connect.add_argument("kind", choices=["kobo", "ona"])
+    connect.add_argument("kind", choices=["kobo", "ona", "sharepoint"])
     connect.add_argument("--workspace", type=Path, default=Path("workspace"))
+    connect.add_argument("--site", default=None,
+                         help="SharePoint site URL, or 'onedrive' for the personal drive")
+    connect.add_argument("--tenant", default=None,
+                         help="Entra tenant, e.g. contoso.onmicrosoft.com")
+    connect.add_argument("--client-id", dest="client_id", default=None)
+    connect.add_argument("--folder", default=None,
+                         help="Folder to pin, e.g. 'Shared Documents/5W'")
 
     connections = sub.add_parser("connections", help="List configured connections")
     connections.add_argument("--workspace", type=Path, default=Path("workspace"))
@@ -126,6 +160,25 @@ def main() -> int:
 
     if args.command == "connect":
         name = input(f"Profile name [{args.kind}]: ").strip() or args.kind
+        if args.kind == "sharepoint":
+            from haa.connectors.base import ConnectorError
+            from haa.connectors.msauth import DEFAULT_CLIENT_ID
+
+            site = args.site or input("Site URL (or 'onedrive'): ").strip()
+            tenant = args.tenant or input("Tenant (e.g. contoso.onmicrosoft.com): ").strip()
+            client_id = args.client_id or DEFAULT_CLIENT_ID
+            try:
+                console.print(run_connect_sharepoint(
+                    args.workspace, name, site, tenant, client_id,
+                    args.folder, console.print,
+                ))
+            except KeyboardInterrupt:
+                console.print("[red]Sign-in aborted.[/red]")
+                return 1
+            except ConnectorError as exc:
+                console.print(f"[red]{exc}[/red]")
+                return 1
+            return 0
         default_url = DEFAULT_URLS[args.kind]
         base_url = input(f"Server URL [{default_url}]: ").strip() or default_url
         token = getpass.getpass("API token: ")

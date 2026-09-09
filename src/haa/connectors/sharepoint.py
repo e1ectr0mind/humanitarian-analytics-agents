@@ -73,13 +73,21 @@ class SharePointConnector:
             self._refresh_tokens()
             return get_json(self._client, url, params=params)
 
+    def _get_raw(self, url: str) -> httpx.Response:
+        try:
+            return self._client.get(url)
+        except Exception as exc:
+            raise ConnectorError(
+                f"Could not download the file: {exc}. Check your network and try again."
+            ) from exc
+
     def _download(self, url: str) -> bytes:
         if self._tokens.is_expired():
             self._refresh_tokens()
-        resp = self._client.get(url)
+        resp = self._get_raw(url)
         if resp.status_code in (401, 403):
             self._refresh_tokens()
-            resp = self._client.get(url)
+            resp = self._get_raw(url)
         if resp.status_code in (401, 403):
             raise ConnectorError(
                 f"Access denied by Microsoft Graph (HTTP {resp.status_code}). "

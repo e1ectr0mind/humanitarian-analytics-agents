@@ -308,3 +308,11 @@ def test_pull_path_prefixed_with_pinned_folder(tmp_path) -> None:
                       tenant=TENANT, client_id="cid", folder="5W")
     SharePointConnector(conn, _token_json()).pull("june.csv", tmp_path)
     assert route.called
+
+
+@respx.mock
+def test_download_network_error_is_friendly() -> None:
+    respx.get(f"{GRAPH}/some/file/content").mock(side_effect=httpx.ConnectError("boom"))
+    c = _drive_ready()
+    with pytest.raises(ConnectorError, match="Check your network"):
+        c._download(f"{GRAPH}/some/file/content")

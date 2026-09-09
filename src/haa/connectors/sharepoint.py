@@ -83,7 +83,10 @@ class SharePointConnector:
         if resp.status_code == 404:
             raise NotFoundError(f"Not found (HTTP 404): {url}")
         if resp.status_code >= 400:
-            raise ConnectorError(f"Download failed (HTTP {resp.status_code}).")
+            raise ConnectorError(
+                f"Download failed (HTTP {resp.status_code}). "
+                "Try again; if it persists, contact IT."
+            )
         return resp.content
 
     def _drive(self) -> str:

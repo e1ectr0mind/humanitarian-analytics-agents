@@ -103,3 +103,11 @@ def test_close_releases_client() -> None:
     c = SharePointConnector(OD_CONN, _token_json())
     c.close()
     assert c._client.is_closed
+
+
+@respx.mock
+def test_download_server_error_is_friendly() -> None:
+    respx.get(f"{GRAPH}/some/file/content").mock(return_value=httpx.Response(500))
+    c = SharePointConnector(OD_CONN, _token_json())
+    with pytest.raises(ConnectorError, match="Try again"):
+        c._download(f"{GRAPH}/some/file/content")

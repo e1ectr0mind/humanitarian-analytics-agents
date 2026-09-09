@@ -51,6 +51,20 @@ Or just ask in the chat: *"Pull fresh submissions of Household Survey from Kobo"
 Pulled files land in `workspace/data/` and are cleaned/analyzed like any local
 export. Only a summary (form name, row count) ever reaches the model.
 
+### SharePoint / OneDrive
+
+    haa connect sharepoint --site https://<tenant>.sharepoint.com/sites/<name> \
+        --tenant <tenant>.onmicrosoft.com --folder "Shared Documents/5W"
+
+Sign-in is the standard Microsoft device-code flow: the CLI prints a code, you
+enter it at microsoft.com/devicelogin and log in with your normal work account
+(password and MFA stay on Microsoft's page — the tool only receives tokens,
+stored in the OS credential store). Use `--site onedrive` for the personal
+drive. Pulls download `.xlsx`/`.csv` files byte-for-byte into
+`workspace/data/`; a pasted SharePoint file link also works as the pull target.
+If the tenant blocks the default client id, pass your own with `--client-id`
+(ask IT/HQ to approve one — read-only Files/Sites scopes).
+
 ## Cleaning a dataset
 
 Ask: *"Clean the beneficiaries dataset."* The cleaner agent produces
@@ -103,6 +117,6 @@ tests on every push.
 
 ## Roadmap
 
-**Completed:** Core + analyst agent, connectors/cleaner, indicator registry + XLSForm designer.
-**Remaining:** SharePoint connector, reporting agent (5W/MEAL), Power BI engineer, web UI. Design docs live
+**Completed:** Core + analyst agent, connectors/cleaner, indicator registry + XLSForm designer, SharePoint connector.
+**Remaining:** reporting agent (5W/MEAL), Power BI engineer, web UI. Design docs live
 in `docs/superpowers/specs/`.

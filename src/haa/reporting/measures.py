@@ -11,6 +11,9 @@ import pandas as pd
 
 MISSING = "(missing)"
 PII_NEXT_STEP = "pick another column, or rename it in the clean copy if it is not personal data"
+# Registry filters are short conditions. A longer text is refused before any parsing:
+# deep nesting overflows the Python parser and a huge in-list costs seconds per evaluation.
+MAX_FILTER_LENGTH = 2000
 
 _FILTER_HINT = (
     "use comparisons such as \"head_sex == 'female'\", and/or, in [...], .isna(), "
@@ -236,14 +239,15 @@ def _validate_filter(df: pd.DataFrame, text: str, pii: list[str]) -> None:
     except (SyntaxError, ValueError, tokenize.TokenError) as exc:
         detail = getattr(exc, "msg", None) or "invalid syntax"
         raise NotComputable(f"filter {text!r} failed: {detail}") from None
-    except RecursionError:
+    except (RecursionError, MemoryError):
+        # too deeply nested for the parser ("Parser stack overflowed")
         raise refused from None
     names: list[str] = []
     try:
         _check_node(tree, names)
         if not _is_row_condition(tree.body):
             raise _Refused
-    except (_Refused, RecursionError):
+    except (_Refused, RecursionError, MemoryError):
         raise refused from None
     columns = {str(c) for c in df.columns}
     pii_names = {str(c) for c in pii}
@@ -262,6 +266,8 @@ def _apply_filter(df: pd.DataFrame, query: object, pii: list[str]) -> pd.DataFra
     if query is None or query == "":
         return df
     text = str(query)
+    if len(text) > MAX_FILTER_LENGTH:
+        raise NotComputable(f"filter is longer than {MAX_FILTER_LENGTH} characters — simplify it")
     for column in pii:
         if re.search(rf"(?<!\w){re.escape(str(column))}(?!\w)", text):
             raise _pii_in_filter(text, column)

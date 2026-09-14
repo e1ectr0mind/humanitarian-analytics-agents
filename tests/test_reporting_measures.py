@@ -262,6 +262,57 @@ def test_filter_evaluation_error_text_is_not_echoed(monkeypatch) -> None:
     assert not any(value in info.value.reason for value in UUIDS)
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "age > " + "-" * 7000 + "1",
+        "not " * 7000 + "age > 1",
+        "~" * 7000 + "(age > 1)",
+    ],
+    ids=["nested-unary-minus", "nested-not", "nested-invert"],
+)
+def test_deeply_nested_filter_is_refused_not_a_memory_error(query: str) -> None:
+    # before the length limit, ast.parse raised MemoryError ("Parser stack overflowed")
+    with pytest.raises(NotComputable) as info:
+        _count(query)
+    assert info.value.reason == "filter is longer than 2000 characters — simplify it"
+
+
+def _padded_filter(length: int) -> str:
+    text = " or ".join(["age > 1"] * 182)  # 1998 characters
+    return text + " " * (length - len(text))
+
+
+def test_filter_longer_than_the_limit_is_refused() -> None:
+    query = _padded_filter(2001)
+    assert len(query) == 2001
+    with pytest.raises(NotComputable) as info:
+        _count(query)
+    assert info.value.reason == "filter is longer than 2000 characters — simplify it"
+
+
+def test_filter_at_the_length_limit_still_works() -> None:
+    query = _padded_filter(2000)
+    assert len(query) == 2000
+    assert _count(query) == 4
+
+
+@pytest.mark.parametrize("target", ["parse", "check"])
+def test_parser_memory_error_is_a_friendly_refusal(monkeypatch, target: str) -> None:
+    import haa.reporting.measures as measures
+
+    def overflow(*args, **kwargs):
+        raise MemoryError("Parser stack overflowed - Python source too complex to parse")
+
+    if target == "parse":
+        monkeypatch.setattr(measures.ast, "parse", overflow)
+    else:
+        monkeypatch.setattr(measures, "_check_node", overflow)
+    with pytest.raises(NotComputable, match="does not allow") as info:
+        _count("age > 1")
+    assert "Parser stack" not in info.value.reason
+
+
 def test_refused_filter_names_the_allowed_syntax() -> None:
     with pytest.raises(NotComputable, match="does not allow.*head_sex == 'female'"):
         _count("oblast.str.len() > 1")

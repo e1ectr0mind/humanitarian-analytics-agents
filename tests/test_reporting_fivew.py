@@ -89,7 +89,7 @@ def test_missing_column_raises() -> None:
 def test_pii_column_refused() -> None:
     mapping = copy.deepcopy(MAPPING)
     mapping["whom"]["disaggregation"] = ["resp_phone"]
-    with pytest.raises(ReportError, match="personal data"):
+    with pytest.raises(ReportError, match="personal data.*pick another column"):
         build_5w(DF, mapping, PII)
 
 

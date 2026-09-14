@@ -8,6 +8,7 @@ import re
 import pandas as pd
 
 MISSING = "(missing)"
+PII_NEXT_STEP = "pick another column, or rename it in the clean copy if it is not personal data"
 
 _FILTER_HINT = (
     "use comparisons such as \"head_sex == 'female'\", and/or, in [...], .isna(), "
@@ -54,13 +55,21 @@ def check_column(df: pd.DataFrame, column: object, pii: list[str]) -> str:
         raise NotComputable("the measure does not name a column")
     if column in pii:
         raise NotComputable(
-            f"column {column!r} is personal data — aggregating by it is not allowed"
+            f"column {column!r} looks like personal data, so reports cannot use it — "
+            f"{PII_NEXT_STEP}"
         )
     if column not in df.columns:
         raise NotComputable(
             f"column {column!r} not found in the dataset — check profile_dataset"
         )
     return column
+
+
+def _pii_in_filter(text: str, column: object) -> NotComputable:
+    return NotComputable(
+        f"filter {text!r} uses column {column!r}, which looks like personal data, so reports "
+        f"cannot use it — {PII_NEXT_STEP}"
+    )
 
 
 class _Refused(Exception):
@@ -169,9 +178,7 @@ def _validate_filter(df: pd.DataFrame, text: str, pii: list[str]) -> None:
     for name in names:
         column = backticked.get(name, name)
         if column in pii_names:
-            raise NotComputable(
-                f"filter {text!r} uses column {column!r}, which is personal data — not allowed"
-            )
+            raise _pii_in_filter(text, column)
         if column not in columns:
             raise NotComputable(
                 f"filter {text!r} uses {column!r}, which is not a column in the dataset "
@@ -185,9 +192,7 @@ def _apply_filter(df: pd.DataFrame, query: object, pii: list[str]) -> pd.DataFra
     text = str(query)
     for column in pii:
         if re.search(rf"(?<!\w){re.escape(str(column))}(?!\w)", text):
-            raise NotComputable(
-                f"filter {text!r} uses column {column!r}, which is personal data — not allowed"
-            )
+            raise _pii_in_filter(text, column)
     _validate_filter(df, text, pii)
     try:
         return df.query(text, local_dict={}, global_dict={})

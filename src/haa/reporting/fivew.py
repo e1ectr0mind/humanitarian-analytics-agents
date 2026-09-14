@@ -46,7 +46,11 @@ def build_5w(df: pd.DataFrame, mapping: dict, pii: list[str]) -> FiveWTable:
 
     for column in [*where, when["field"], what["field"], id_field, *dimensions]:
         if column in pii:
-            raise ReportError(f"column {column!r} is personal data — it cannot be used in a 5W")
+            raise ReportError(
+                f"column {column!r} looks like personal data, so a 5W cannot use it — pick "
+                "another column in 5w.yaml, or rename it in the clean copy if it is not "
+                "personal data"
+            )
         if column not in df.columns:
             raise ReportError(
                 f"column {column!r} from 5w.yaml not found in the dataset — check profile_dataset"

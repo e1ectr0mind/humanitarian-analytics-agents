@@ -100,6 +100,12 @@ def load_scoped(
             raise ReportError(
                 f"Period column {period.field!r} not found in {path.name}. Columns: {columns}"
             )
+        if period.field in pii:
+            raise ReportError(
+                f"Period column {period.field!r} looks like personal data, so reports cannot "
+                "filter by it — pick another date column, or rename it in the clean copy if "
+                "it is not personal data."
+            )
         dates = parse_dates(df[period.field])
         bad_dates = int(dates.isna().sum())
         start = pd.Timestamp(period.start)

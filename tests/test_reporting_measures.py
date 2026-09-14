@@ -74,13 +74,13 @@ def test_missing_column() -> None:
 
 
 def test_pii_field_refused() -> None:
-    with pytest.raises(NotComputable, match="personal data"):
+    with pytest.raises(NotComputable, match="personal data.*pick another column"):
         evaluate_measure(DF, {"aggregation": "count_unique", "field": "resp_phone"}, PII)
 
 
 def test_pii_in_filter_refused() -> None:
     measure = {"aggregation": "count", "filter": "resp_phone == '+380 1'"}
-    with pytest.raises(NotComputable, match="personal data"):
+    with pytest.raises(NotComputable, match="personal data.*pick another column"):
         evaluate_measure(DF, measure, PII)
 
 
@@ -212,5 +212,11 @@ def test_filter_cannot_reach_pii_column_through_pandas_cleaned_name() -> None:
 
 
 def test_backticked_pii_column_refused() -> None:
-    with pytest.raises(NotComputable, match="personal data"):
+    with pytest.raises(NotComputable, match="personal data.*pick another column"):
         _count("`resp phone` == '+380 1'")
+
+
+def test_pii_column_spelled_with_lookalike_letters_refused() -> None:
+    # Python (and so pandas) normalizes fullwidth letters in names to "resp_phone"
+    with pytest.raises(NotComputable, match="personal data.*pick another column"):
+        _count("ｒｅｓｐ_ｐｈｏｎｅ == '+380 1'")

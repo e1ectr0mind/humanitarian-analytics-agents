@@ -113,6 +113,12 @@ def test_load_scoped_demo_detects_pii_and_counts(demo_workspace: Path) -> None:
     assert len(df) == len(raw)
 
 
+def test_load_scoped_refuses_pii_period_column(demo_workspace: Path) -> None:
+    period = Period("resp_name", date(2026, 6, 1), date(2026, 8, 31))
+    with pytest.raises(ReportError, match="'resp_name'.*personal data.*pick another"):
+        load_scoped(demo_workspace / "data", "beneficiaries", period)
+
+
 def test_load_scoped_handles_utc_offset_timestamps(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "hh.csv",

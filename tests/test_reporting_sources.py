@@ -1,6 +1,6 @@
 import os
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -12,6 +12,7 @@ from haa.reporting.sources import (
     ReportError,
     SourceInfo,
     load_scoped,
+    parse_dates,
     parse_period,
     resolve_dataset,
 )
@@ -287,6 +288,35 @@ def test_load_scoped_all_empty_numeric_period_column_is_not_an_error(tmp_path: P
     df, info, _ = load_scoped(tmp_path, "hh", period)
     assert len(df) == 0
     assert info.rows_bad_date == 2
+
+
+def test_parse_dates_numbers_in_a_text_column_are_not_dates() -> None:
+    # e.g. an unformatted Excel serial (46174) among date strings: pandas would read it
+    # as nanoseconds after 1970-01-01 rather than as no date at all
+    series = pd.Series(["2026-06-01", 46174, None, "bad"], dtype=object)
+    parsed = parse_dates(series)
+    assert parsed.notna().tolist() == [True, False, False, False]
+    assert parsed[0] == pd.Timestamp("2026-06-01")
+
+
+def test_parse_dates_keeps_date_and_datetime_objects() -> None:
+    series = pd.Series(
+        [date(2026, 6, 1), datetime(2026, 6, 2, 9, 30), pd.Timestamp("2026-06-03"), True, 1.5],
+        dtype=object,
+    )
+    parsed = parse_dates(series)
+    assert parsed.notna().tolist() == [True, True, True, False, False]
+    assert parsed[1] == pd.Timestamp("2026-06-02 09:30")
+
+
+def test_load_scoped_counts_numbers_in_a_date_column_as_invalid_dates(tmp_path: Path) -> None:
+    pd.DataFrame(
+        {"id": ["a", "b", "c", "d"], "when": ["2026-06-01", 46174, None, "bad"]}
+    ).to_excel(tmp_path / "hh.xlsx", index=False)
+    df, info, _ = load_scoped(tmp_path, "hh", Period("when", date(2026, 6, 1), date(2026, 8, 31)))
+    assert df["id"].tolist() == ["a"]
+    assert info.rows_bad_date == 3
+    assert info.rows_excluded_by_period == 3
 
 
 def test_load_scoped_handles_utc_offset_timestamps(tmp_path: Path) -> None:

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from haa.core.tools.profiler import detect_pii_columns, discover_datasets, listable_columns
@@ -76,12 +77,24 @@ def parse_period(date_field: str | None, start: str | None, end: str | None) -> 
     return Period(field=date_field, start=first, end=last)
 
 
+def _is_date_like(value: object) -> bool:
+    # datetime and pd.Timestamp are subclasses of date
+    return isinstance(value, (str, date, np.datetime64))
+
+
 def parse_dates(series: pd.Series) -> pd.Series:
     """Parse mixed date/datetime values; unparseable ones become NaT.
+
+    In a text (object) column only strings and date/datetime values count: a number or
+    bool there (e.g. an unformatted Excel serial like 46174) would otherwise parse as a
+    1970 timestamp, so it becomes NaT — a row without a valid date. Numeric columns are
+    refused before parsing (check_not_numeric_date).
 
     Values carrying a UTC offset (Kobo timestamps) are compared in UTC, so a
     submission shortly after local midnight can fall on the previous date.
     """
+    if series.dtype == object:
+        series = series.where(series.map(_is_date_like).astype(bool))
     parsed = pd.to_datetime(series, errors="coerce", format="mixed", utc=True)
     return parsed.dt.tz_convert(None)
 

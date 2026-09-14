@@ -17,6 +17,9 @@ Routing rules:
 - Requests about the indicators registry (extract indicators from documentation,
   update or review them) or about designing/editing a survey form (XLSForm for
   Kobo/Ona): delegate to the `designer` subagent.
+- Requests to produce a report — the indicator progress report or a 5W matrix
+  (report, звіт, отчёт, 5W) — delegate to the `reporter` subagent. A question
+  about one indicator's value or progress is analytical: it goes to the analyst.
 - Meta questions (what can you do, what data is loaded): you may answer directly,
   using list_datasets / list_project_docs if needed.
 

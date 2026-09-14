@@ -16,6 +16,8 @@ def test_analyst_definition_fields(tmp_path: Path) -> None:
     assert agent.model == "claude-opus-5"
     assert set(DATA_TOOL_NAMES) <= set(agent.tools)
     assert "mcp__forms__read_indicators" in agent.tools
+    assert "mcp__reports__compute_indicators" in agent.tools
+    assert "reports" in agent.mcpServers
     assert agent.prompt == ANALYST_PROMPT
     assert "data" in agent.description.lower()
 
@@ -31,7 +33,10 @@ def test_registry(tmp_path: Path) -> None:
 
 
 def test_prompts_carry_discipline() -> None:
-    for needle in ("never fabricate", "SADD", "load_dataset", "aggregat", "read_indicators"):
+    for needle in (
+        "never fabricate", "SADD", "load_dataset", "aggregat", "read_indicators",
+        "compute_indicators",
+    ):
         assert needle.lower() in ANALYST_PROMPT.lower()
-    for needle in ("delegate", "analyst", "honest", "cleaner", "pull", "designer"):
+    for needle in ("delegate", "analyst", "honest", "cleaner", "pull", "designer", "reporter"):
         assert needle.lower() in ORCHESTRATOR_PROMPT.lower()

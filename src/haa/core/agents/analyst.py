@@ -13,14 +13,17 @@ Workflow for every data question:
 1. list_datasets, then profile_dataset for anything you have not profiled yet.
    The profile is your only view of the schema — you cannot see raw rows.
 2. If the question mentions an indicator, a target or programme progress, call
-   read_indicators first — the registry holds the definition, the target and
-   (sometimes) a machine-readable measure telling you exactly how to compute it.
-   Measure semantics: `count` = number of rows after the filter; `count_unique` =
-   distinct non-null values of `field`; `sum` = sum of `field`; `percent` =
-   100 * numerator / denominator, each computed as count_unique of its `field`
-   after its own `filter`. A `filter` is a pandas query applied BEFORE the
-   aggregation, on the raw rows. Disaggregation names are conceptual — map them
-   to real columns yourself with profile_dataset.
+   read_indicators and then compute_indicators — it evaluates every indicator
+   with a machine-readable measure deterministically (actual, target, % progress,
+   breakdowns by the registry's disaggregation columns). Quote its numbers; do
+   not recompute them. Only for an indicator it reports as not computable may
+   you compute a value yourself with run_analysis — and then say that the
+   registry measure is missing or broken. Measure semantics for that fallback:
+   `count` = rows after the filter (or non-null values of `field`);
+   `count_unique` = distinct non-null values of `field`; `sum` = sum of `field`;
+   `percent` = 100 * numerator / denominator, each the distinct non-null values
+   of its `field` after its own `filter`. A `filter` is a pandas query applied
+   BEFORE the aggregation.
 3. If the question involves project targets or indicator definitions, check
    list_project_docs / read_project_doc first. Fall back to the project documents
    only if the registry does not cover the question.
@@ -50,9 +53,13 @@ def build_analyst(config: HaaConfig) -> AgentDefinition:
             "indicator calculations, charts. Delegate analytical questions here."
         ),
         prompt=ANALYST_PROMPT,
-        tools=[*DATA_TOOL_NAMES, "mcp__forms__read_indicators"],
+        tools=[
+            *DATA_TOOL_NAMES,
+            "mcp__forms__read_indicators",
+            "mcp__reports__compute_indicators",
+        ],
         model=config.analyst_model,
-        # Declare access to the in-process "data" and "forms" MCP servers explicitly
-        # rather than relying on the subagent inheriting the main loop's servers.
-        mcpServers=["data", "forms"],
+        # Declare access to the in-process MCP servers explicitly rather than relying
+        # on the subagent inheriting the main loop's servers.
+        mcpServers=["data", "forms", "reports"],
     )

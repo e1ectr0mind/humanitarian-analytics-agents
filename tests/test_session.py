@@ -12,6 +12,7 @@ from haa.core.session import (
 from haa.core.telemetry import SessionTelemetry
 from haa.core.tools.datatools import DATA_TOOL_NAMES
 from haa.core.tools.formtools import FORM_TOOL_NAMES
+from haa.core.tools.reporttools import REPORT_TOOL_NAMES
 from haa.core.tools.sourcetools import SOURCE_TOOL_NAMES
 
 
@@ -112,6 +113,9 @@ def test_build_options(demo_workspace: Path) -> None:
     assert "data" in opts.mcp_servers
     assert "sources" in opts.mcp_servers
     assert "forms" in opts.mcp_servers
+    assert "reports" in opts.mcp_servers
+    assert "reporter" in opts.agents
+    assert set(REPORT_TOOL_NAMES) <= set(opts.allowed_tools)
     assert set(DATA_TOOL_NAMES) <= set(opts.allowed_tools)
     assert set(SOURCE_TOOL_NAMES) <= set(opts.allowed_tools)
     assert set(FORM_TOOL_NAMES) <= set(opts.allowed_tools)

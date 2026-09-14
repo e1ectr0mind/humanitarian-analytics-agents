@@ -298,6 +298,32 @@ def test_build_5w_collapses_labels_for_non_listable_disaggregation(
     assert match is not None and int(match.group(1)) > 0
 
 
+def test_build_indicator_report_and_5w_prefer_clean_copy(
+    box: ReportToolbox, report_workspace: Path
+) -> None:
+    """Acceptance criterion 3 (spec §7): with a clean copy present, reports read it,
+    even though the raw file is still around and holds different rows."""
+    raw = pd.read_excel(report_workspace / "data" / "beneficiaries.xlsx")
+    clean = raw.iloc[:-100].reset_index(drop=True)  # fewer, and fewer distinct _uuid
+    assert clean["_uuid"].nunique() != raw["_uuid"].nunique()
+    clean.to_excel(report_workspace / "data" / "beneficiaries_clean.xlsx", index=False)
+
+    out = box.build_indicator_report()
+    assert "clean copy" in out
+    assert "beneficiaries_clean.xlsx" in out
+    line_1_1 = next(line for line in out.splitlines() if line.startswith("- 1.1"))
+    assert f"actual {clean['_uuid'].nunique()}" in line_1_1
+    md_text = (box.config.reports_dir / "indicators_2026-09-14.md").read_text(encoding="utf-8")
+    assert "beneficiaries_clean.xlsx" in md_text
+
+    box.save_5w_mapping(MAPPING_YAML)
+    out_5w = box.build_5w()
+    assert "clean copy" in out_5w
+    assert "beneficiaries_clean.xlsx" in out_5w
+    md_5w_text = (box.config.reports_dir / "5w_2026-09-14.md").read_text(encoding="utf-8")
+    assert "Dataset: beneficiaries (beneficiaries_clean.xlsx, clean copy)" in md_5w_text
+
+
 def test_tool_outputs_never_contain_pii(box: ReportToolbox, report_workspace: Path) -> None:
     raw = pd.read_excel(report_workspace / "data" / "beneficiaries.xlsx")
     box.save_5w_mapping(MAPPING_YAML)

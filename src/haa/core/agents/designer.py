@@ -32,6 +32,10 @@ Indicators registry:
   so use the unit ID column (e.g. `_uuid`) there.
 - `disaggregation` entries must be real column names from profile_dataset — the
   report engine breaks down by those columns.
+- A `filter` may only use comparisons (==, !=, <, <=, >, >=), and/or,
+  in [...], .isna(), .notna(), .isin([...]), .str.contains/startswith/endswith(...)
+  on a column, and backticks for column names with spaces (`hh size` > 3); the
+  report engine refuses anything else.
 - Save with save_indicators; fix every reported validation error and retry.
 - Registry YAML schema — use exactly these keys, no others:
 

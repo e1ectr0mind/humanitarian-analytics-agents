@@ -27,7 +27,7 @@ def test_analyst_model_configurable(tmp_path: Path) -> None:
 
 def test_registry(tmp_path: Path) -> None:
     agents = build_agents(_cfg(tmp_path))
-    assert set(agents) == {"analyst", "cleaner", "designer"}
+    assert set(agents) == {"analyst", "cleaner", "designer", "reporter"}
 
 
 def test_prompts_carry_discipline() -> None:

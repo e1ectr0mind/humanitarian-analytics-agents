@@ -26,8 +26,8 @@ def test_designer_model_configurable(tmp_path: Path) -> None:
     assert build_designer(_cfg(tmp_path)).model == "claude-sonnet-5"
 
 
-def test_registry_has_three_roles(tmp_path: Path) -> None:
-    assert set(build_agents(_cfg(tmp_path))) == {"analyst", "cleaner", "designer"}
+def test_registry_has_all_roles(tmp_path: Path) -> None:
+    assert set(build_agents(_cfg(tmp_path))) == {"analyst", "cleaner", "designer", "reporter"}
 
 
 def test_analyst_can_read_indicators(tmp_path: Path) -> None:

@@ -6,6 +6,7 @@ from haa.config import HaaConfig
 from haa.core.agents.analyst import build_analyst
 from haa.core.agents.cleaner import build_cleaner
 from haa.core.agents.designer import build_designer
+from haa.core.agents.reporter import build_reporter
 
 
 def build_agents(config: HaaConfig) -> dict[str, AgentDefinition]:
@@ -13,4 +14,5 @@ def build_agents(config: HaaConfig) -> dict[str, AgentDefinition]:
         "analyst": build_analyst(config),
         "cleaner": build_cleaner(config),
         "designer": build_designer(config),
+        "reporter": build_reporter(config),
     }

@@ -19,6 +19,7 @@ class HaaConfig:
     analyst_model: str = "claude-opus-5"
     cleaner_model: str = "claude-opus-5"
     designer_model: str = "claude-opus-5"
+    reporter_model: str = "claude-opus-5"
     max_budget_usd: float = 2.0
     sandbox_timeout_s: int = 60
     output_limit_bytes: int = 32768

@@ -207,6 +207,13 @@ def test_filter_cannot_write_files(tmp_path: Path, template: str) -> None:
         "oblast.str.contains('A', False)",
         "oblast.str.contains('A', case=1)",
         "oblast.str.startswith('A', 'x')",
+        # a signed number must not crash the checker (it is a constant per
+        # _is_constant, but not a bool/str constant, so it must be refused,
+        # not raise AttributeError while inspecting its .value)
+        "oblast.str.contains('A', case=-5)",
+        "oblast.str.contains('A', case=+5)",
+        "oblast.str.contains('A', regex=-0)",
+        "oblast.str.contains(-1)",
     ],
 )
 def test_disallowed_filter_syntax_is_refused(query: str) -> None:

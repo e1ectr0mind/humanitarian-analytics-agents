@@ -100,10 +100,21 @@ def _is_str_constant(node: ast.AST) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
+def _is_bool_constant(node: ast.AST) -> bool:
+    # Checked directly against ast.Constant, not via _is_constant: _is_constant also
+    # accepts a signed number (e.g. -5), which is an ast.UnaryOp wrapping the Constant
+    # and has no .value of its own — accessing .value on it would raise AttributeError.
+    return isinstance(node, ast.Constant) and isinstance(node.value, bool)
+
+
 def _is_safe_pattern(node: ast.AST) -> bool:
     """A literal `.str.contains` pattern: `|` may separate literal alternatives, but no
     other regex metacharacter — those can make matching backtrack catastrophically."""
     return _is_str_constant(node) and not any(c in _UNSAFE_PATTERN_CHARS for c in node.value)
+
+
+def _keywords_ok(node: ast.Call, allowed: set[str]) -> bool:
+    return all(kw.arg in allowed and _is_constant(kw.value) for kw in node.keywords)
 
 
 def _check_call(node: ast.Call, names: list[str]) -> None:
@@ -119,29 +130,21 @@ def _check_call(node: ast.Call, names: list[str]) -> None:
         column = func.value.value
         if func.attr == "contains":
             args_ok = len(node.args) == 1 and _is_safe_pattern(node.args[0])
-            keywords_ok = all(
-                kw.arg in _CALL_KEYWORDS
-                and _is_constant(kw.value)
-                and (kw.arg != "case" or isinstance(kw.value.value, bool))
-                and (kw.arg != "regex" or kw.value.value is False)
+            keywords_ok = _keywords_ok(node, _CALL_KEYWORDS) and all(
+                (kw.arg != "case" or _is_bool_constant(kw.value))
+                and (kw.arg != "regex" or (_is_bool_constant(kw.value) and kw.value.value is False))
                 for kw in node.keywords
             )
         else:
             args_ok = len(node.args) == 1 and _is_str_constant(node.args[0])
-            keywords_ok = all(
-                kw.arg in _ANCHOR_KEYWORDS and _is_constant(kw.value) for kw in node.keywords
-            )
+            keywords_ok = _keywords_ok(node, _ANCHOR_KEYWORDS)
     elif func.attr in ("isna", "notna"):
         column, args_ok = func.value, not node.args
-        keywords_ok = all(
-            kw.arg in _CALL_KEYWORDS and _is_constant(kw.value) for kw in node.keywords
-        )
+        keywords_ok = _keywords_ok(node, _CALL_KEYWORDS)
     elif func.attr == "isin":
         column = func.value
         args_ok = len(node.args) == 1 and _is_constant_list(node.args[0])
-        keywords_ok = all(
-            kw.arg in _CALL_KEYWORDS and _is_constant(kw.value) for kw in node.keywords
-        )
+        keywords_ok = _keywords_ok(node, _CALL_KEYWORDS)
     else:
         raise _Refused
     if not (isinstance(column, ast.Name) and args_ok and keywords_ok):

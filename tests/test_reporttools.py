@@ -70,9 +70,13 @@ def test_compute_indicators_hides_high_cardinality_breakdowns(
     for value in raw["_uuid"].dropna().astype(str):
         assert value not in out
     categories = raw["_uuid"].nunique() + int(raw["_uuid"].isna().any())
+    # 3000 categories is over the breakdown cap (2000), so the breakdown is refused
+    # outright; the "values not shown" line for a breakdown under the cap is covered
+    # by the narrow-period test below.
+    assert categories > 2000
     assert (
-        f"by _uuid: {categories} categories — values not shown here "
-        "(too many distinct values in the dataset); see the report file"
+        f"by _uuid: not available — {categories} distinct values — too many to break "
+        "down by; pick a column with fewer values"
     ) in out
     oblast_line = next(line for line in out.splitlines() if "by oblast:" in line)
     for value in raw["oblast"].dropna().unique():

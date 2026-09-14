@@ -17,6 +17,11 @@ from haa.reporting.measures import (
 )
 from haa.reporting.sources import DatasetNotFound, Period, ReportError, SourceInfo, load_scoped
 
+# Each breakdown category re-filters the frame and re-runs the measure, so an ID-like
+# dimension (one category per record) stalls the engine. Hromada-level geography
+# (~1,470 in Ukraine) stays under the cap.
+MAX_BREAKDOWN_CATEGORIES = 2000
+
 
 @dataclass(frozen=True)
 class BreakdownRow:
@@ -60,6 +65,12 @@ def _breakdown(
 ) -> list[BreakdownRow]:
     column = check_column(df, dimension, pii)
     keys = category_keys(df[column])
+    count = int(keys.nunique())
+    if count > MAX_BREAKDOWN_CATEGORIES:
+        raise NotComputable(
+            f"{count} distinct values — too many to break down by; "
+            "pick a column with fewer values"
+        )
     rows: list[BreakdownRow] = []
     for category in ordered_categories(keys):
         subset = df.loc[keys == category]

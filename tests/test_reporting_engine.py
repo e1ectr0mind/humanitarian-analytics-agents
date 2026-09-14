@@ -5,8 +5,10 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from haa.core.tools.profiler import detect_pii_columns
+from haa.reporting import engine
 from haa.reporting.engine import evaluate_indicator, evaluate_registry
-from haa.reporting.measures import MISSING
+from haa.reporting.measures import MISSING, category_keys
 from haa.reporting.sources import Period, ReportError
 from tests.conftest import DEMO_REGISTRY
 from tests.test_reporting_measures import DF, PERCENT_FEMALE, PII
@@ -71,6 +73,44 @@ def test_missing_or_pii_dimension_is_a_breakdown_error_only() -> None:
     assert result.breakdowns == {}
 
 
+def _counting_evaluate_measure(monkeypatch) -> list[int]:
+    """Patch the engine's evaluate_measure to count calls; returns the counter."""
+    calls = [0]
+    original = engine.evaluate_measure
+
+    def counted(*args, **kwargs):
+        calls[0] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(engine, "evaluate_measure", counted)
+    return calls
+
+
+def test_breakdown_category_cap_default() -> None:
+    assert engine.MAX_BREAKDOWN_CATEGORIES == 2000
+
+
+def test_breakdown_over_the_category_cap_is_a_breakdown_error(monkeypatch) -> None:
+    monkeypatch.setattr(engine, "MAX_BREAKDOWN_CATEGORIES", 2)
+    calls = _counting_evaluate_measure(monkeypatch)
+    item = _item(
+        {"dataset": "hh", "aggregation": "count_unique", "field": "_uuid"},
+        disaggregation=["oblast", "head_sex"],
+    )
+    result = evaluate_indicator(item, DF, PII, "hh")
+    assert result.status == "computed" and result.actual == 4.0
+    # oblast has 2 categories (at the cap): computed as before
+    assert [(r.category, r.value) for r in result.breakdowns["oblast"]] == [
+        ("X", 2.0), ("Y", 2.0),
+    ]
+    # head_sex has 3 categories (female, male, missing): refused, nothing evaluated
+    assert "head_sex" not in result.breakdowns
+    assert result.breakdown_errors["head_sex"] == (
+        "3 distinct values — too many to break down by; pick a column with fewer values"
+    )
+    assert calls[0] == 1 + 2  # the headline value, then one per oblast category
+
+
 def test_failing_measure_makes_indicator_not_computable() -> None:
     item = _item({"dataset": "hh", "aggregation": "count_unique", "field": "sex"})
     result = evaluate_indicator(item, DF, PII, "hh")
@@ -107,6 +147,28 @@ def test_registry_demo_breakdowns(demo_run, demo_df: pd.DataFrame) -> None:
     assert sum(r.value for r in by_oblast) == 3000  # each household lives in one oblast
     assert "Харківська обл." in {r.category for r in by_oblast}
     assert result.breakdowns["head_sex"][-1].category == MISSING
+
+
+def test_demo_breakdown_by_record_id_is_refused_without_evaluating_categories(
+    monkeypatch, demo_df: pd.DataFrame
+) -> None:
+    monkeypatch.setattr(engine, "MAX_BREAKDOWN_CATEGORIES", 100)
+    calls = _counting_evaluate_measure(monkeypatch)
+    item = _item(
+        {"dataset": "beneficiaries", "aggregation": "count_unique", "field": "_uuid"},
+        disaggregation=["_uuid", "oblast"],
+    )
+    result = evaluate_indicator(item, demo_df, detect_pii_columns(demo_df), "beneficiaries")
+    categories = category_keys(demo_df["_uuid"]).nunique()
+    assert categories == 3000
+    assert result.actual == 3000.0  # the headline value is unaffected
+    assert "_uuid" not in result.breakdowns
+    assert result.breakdown_errors["_uuid"] == (
+        "3000 distinct values — too many to break down by; pick a column with fewer values"
+    )
+    oblasts = result.breakdowns["oblast"]
+    assert sum(r.value for r in oblasts) == 3000
+    assert calls[0] == 1 + len(oblasts)  # nothing evaluated per _uuid category
 
 
 def test_registry_demo_source_info(demo_run, demo_df: pd.DataFrame) -> None:

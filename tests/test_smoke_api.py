@@ -108,6 +108,7 @@ async def test_indicator_progress_uses_logframe(demo_workspace: Path, df: pd.Dat
 
     log = session.telemetry.path.read_text(encoding="utf-8")
     assert "mcp__forms__read_indicators" in log, "analyst did not consult the registry"
+    assert "mcp__reports__compute_indicators" in log, "analyst did not use the indicator engine"
 
 
 async def test_chart_saved(demo_workspace: Path) -> None:
@@ -231,3 +232,77 @@ async def test_designer_produces_compiling_form(demo_workspace: Path) -> None:
     assert consent_found, f"no consent question found: {question_names}"
     sadd_tokens = {"sex", "gender", "stat", "статі", "стать"}
     assert tokens & sadd_tokens, f"no sex/gender question found: {question_names}"
+
+
+async def test_reporter_builds_indicator_report(demo_workspace: Path) -> None:
+    import time
+    from datetime import date
+
+    import openpyxl
+    import yaml
+
+    from haa.indicators.registry import registry_path
+    from tests.conftest import DEMO_REGISTRY
+
+    cfg = load_config(demo_workspace)
+    registry_path(cfg.workspace).write_text(
+        yaml.safe_dump(DEMO_REGISTRY, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    started = time.time()
+    async with AnalyticsSession(cfg) as session:
+        async for _ in session.ask("Зроби звіт про прогрес за індикаторами проєкту."):
+            pass
+        log_text = session.telemetry.path.read_text(encoding="utf-8")
+
+    xlsx = cfg.reports_dir / f"indicators_{date.today().isoformat()}.xlsx"
+    assert xlsx.is_file() and xlsx.stat().st_mtime >= started, "indicator report not written"
+    assert xlsx.with_suffix(".md").is_file()
+
+    clean = cfg.data_dir / "beneficiaries_clean.xlsx"  # the engine prefers a clean copy
+    source = pd.read_excel(clean if clean.is_file() else cfg.data_dir / "beneficiaries.xlsx")
+    reached = source["_uuid"].nunique()
+    female = source.loc[source["head_sex"] == "female", "_uuid"].nunique()
+    summary = {
+        row[0]: row
+        for row in openpyxl.load_workbook(xlsx)["Summary"].iter_rows(min_row=2, values_only=True)
+    }
+    assert summary["1.1"][5] == reached
+    assert summary["1.2"][5] == pytest.approx(100 * female / reached, abs=0.01)
+    assert summary["2.1"][7] == "not_computable"
+
+    assert '"kind": "report_built"' in log_text
+    assert "mcp__data__run_analysis" not in log_text, "report numbers must come from the engine"
+
+
+async def test_reporter_proposes_mapping_and_builds_5w(demo_workspace: Path) -> None:
+    import time
+    from datetime import date
+
+    import openpyxl
+
+    from haa.reporting.mapping import load_mapping, mapping_path, validate_mapping
+
+    cfg = load_config(demo_workspace)
+    mapping_path(cfg.workspace).unlink(missing_ok=True)
+    started = time.time()
+    async with AnalyticsSession(cfg) as session:
+        async for _ in session.ask("Зроби 5W-матрицю за даними beneficiaries."):
+            pass
+        log_text = session.telemetry.path.read_text(encoding="utf-8")
+
+    mapping = load_mapping(cfg.workspace)
+    assert mapping is not None, "reporter did not save a 5W mapping"
+    assert validate_mapping(mapping) == []
+    assert mapping["whom"]["id_field"] == "_uuid"
+
+    xlsx = cfg.reports_dir / f"5w_{date.today().isoformat()}.xlsx"
+    assert xlsx.is_file() and xlsx.stat().st_mtime >= started, "5W report not written"
+    workbook = openpyxl.load_workbook(xlsx)
+    rows = list(workbook["5W"].iter_rows(values_only=True))
+    header, body = list(rows[0]), rows[1:]
+    assert set(mapping["where"]) <= set(header)
+    beneficiaries = header.index("Beneficiaries")
+    assert body and all(row[beneficiaries] > 0 for row in body)
+    about = {row[0]: row[1] for row in workbook["About"].iter_rows(values_only=True)}
+    assert about["Unique reach (distinct _uuid)"] == 3000
+    assert "mcp__data__run_analysis" not in log_text

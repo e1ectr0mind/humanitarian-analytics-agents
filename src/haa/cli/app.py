@@ -68,6 +68,28 @@ def run_pull(workspace: Path, profile: str, form: str) -> str:
     return SourceToolbox(cfg, telemetry).pull_form(profile, form)
 
 
+def run_report(workspace: Path, kind: str, period: str | None, date_field: str | None) -> str:
+    from datetime import UTC, datetime
+
+    from haa.core.telemetry import SessionTelemetry
+    from haa.core.tools.reporttools import ReportToolbox
+
+    start = end = None
+    if period:
+        if ".." not in period:
+            return "Use --period START..END, for example 2026-06-01..2026-08-31."
+        start, end = (part.strip() for part in period.split("..", 1))
+    try:
+        cfg = load_config(workspace)
+    except ConfigError as exc:
+        return str(exc)
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
+    box = ReportToolbox(cfg, SessionTelemetry(cfg.logs_dir / f"cli-report-{stamp}.jsonl"))
+    if kind == "indicators":
+        return box.build_indicator_report(date_field, start, end)
+    return box.build_5w(date_field, start, end)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="haa", description="Humanitarian Analytics Agents")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -97,6 +119,19 @@ def build_parser() -> argparse.ArgumentParser:
     pull.add_argument("profile")
     pull.add_argument("--form", required=True)
     pull.add_argument("--workspace", type=Path, default=Path("workspace"))
+
+    report = sub.add_parser("report", help="Build a report without the LLM (indicators or 5W)")
+    report.add_argument("kind", choices=["indicators", "5w"])
+    report.add_argument("--workspace", type=Path, default=Path("workspace"))
+    report.add_argument(
+        "--period", default=None, help="START..END, for example 2026-06-01..2026-08-31"
+    )
+    report.add_argument(
+        "--date-field",
+        dest="date_field",
+        default=None,
+        help="Date column for the period (the 5W defaults to its when.field)",
+    )
 
     return parser
 
@@ -199,6 +234,14 @@ def main() -> int:
 
     if args.command == "pull":
         console.print(run_pull(args.workspace, args.profile, args.form))
+        return 0
+
+    if args.command == "report":
+        console.print(
+            run_report(args.workspace, args.kind, args.period, args.date_field),
+            markup=False,
+            highlight=False,
+        )
         return 0
 
     if args.command == "demo":

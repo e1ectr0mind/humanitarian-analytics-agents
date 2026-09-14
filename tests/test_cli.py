@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from haa.cli.app import build_parser, run_connect, run_pull, validate_workspace
+from haa.cli.app import build_parser, run_connect, run_pull, run_report, validate_workspace
 from haa.config import load_config
 
 
@@ -121,3 +121,59 @@ def test_connect_sharepoint_keyring_failure_is_friendly(
     assert app.main() == 1
     out = capsys.readouterr().out
     assert "HAA_TOKEN_SP" in out and "Traceback" not in out
+
+
+def test_parser_report() -> None:
+    a = build_parser().parse_args([
+        "report", "indicators",
+        "--period", "2026-06-01..2026-08-31",
+        "--date-field", "submission_date",
+    ])
+    assert a.command == "report" and a.kind == "indicators"
+    assert a.period == "2026-06-01..2026-08-31" and a.date_field == "submission_date"
+    b = build_parser().parse_args(["report", "5w"])
+    assert b.kind == "5w" and b.period is None and b.date_field is None
+
+
+def test_run_report_indicators(report_workspace: Path) -> None:
+    out = run_report(report_workspace, "indicators", None, None)
+    assert "1.1" in out and "Report files:" in out
+    assert list((report_workspace / "reports").glob("indicators_*.xlsx"))
+
+
+def test_run_report_with_period(report_workspace: Path) -> None:
+    out = run_report(report_workspace, "indicators", "2026-06-01..2026-08-31", "submission_date")
+    assert "2026-06-01 .. 2026-08-31 (by submission_date)" in out
+
+
+def test_run_report_bad_period_format(report_workspace: Path) -> None:
+    out = run_report(report_workspace, "indicators", "2026-06-01", "submission_date")
+    assert "START..END" in out
+
+
+def test_run_report_5w_without_mapping(report_workspace: Path) -> None:
+    assert "no 5W mapping yet" in run_report(report_workspace, "5w", None, None)
+
+
+def test_run_report_5w_with_mapping(report_workspace: Path) -> None:
+    from haa.reporting.mapping import save_mapping
+    from tests.test_reporting_mapping import VALID_MAPPING
+
+    save_mapping(report_workspace, VALID_MAPPING)
+    out = run_report(report_workspace, "5w", None, None)
+    assert "Unique reach (distinct _uuid): 3000" in out
+    assert list((report_workspace / "reports").glob("5w_*.xlsx"))
+
+
+def test_run_report_missing_workspace(tmp_path: Path) -> None:
+    assert "does not exist" in run_report(tmp_path / "nope", "indicators", None, None)
+
+
+def test_main_report_prints_summary(report_workspace: Path, monkeypatch, capsys) -> None:
+    import haa.cli.app as app
+
+    monkeypatch.setattr(
+        "sys.argv", ["haa", "report", "indicators", "--workspace", str(report_workspace)]
+    )
+    assert app.main() == 0
+    assert "Report files:" in capsys.readouterr().out

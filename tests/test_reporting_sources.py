@@ -198,6 +198,82 @@ def test_load_scoped_no_raw_file_no_stale_warning(tmp_path: Path) -> None:
     assert info.stale_warning is None
 
 
+def test_load_scoped_stale_clean_copy_warns_when_requested_by_clean_name(
+    tmp_path: Path,
+) -> None:
+    """Requesting the dataset directly as "hh_clean" must compare against the same
+    raw file "hh" that requesting it as "hh" would — not skip the check entirely."""
+    clean = _write_csv(tmp_path / "hh_clean.csv", {"id": ["a"]})
+    raw = _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"]})
+    now = time.time()
+    os.utime(clean, (now, now))
+    os.utime(raw, (now + 86400, now + 86400))
+    _, info, _ = load_scoped(tmp_path, "hh_clean", None)
+    assert info.used_clean is True
+    assert info.raw_updated == date.fromtimestamp(now + 86400)
+    assert info.stale_warning is not None
+
+
+def test_load_scoped_clean_copy_not_stale_when_newer_requested_by_clean_name(
+    tmp_path: Path,
+) -> None:
+    clean = _write_csv(tmp_path / "hh_clean.csv", {"id": ["a"]})
+    raw = _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"]})
+    now = time.time()
+    os.utime(raw, (now, now))
+    os.utime(clean, (now + 86400, now + 86400))
+    _, info, _ = load_scoped(tmp_path, "hh_clean", None)
+    assert info.raw_updated is None
+    assert info.stale_warning is None
+
+
+def test_load_scoped_stale_clean_copy_mixed_extensions(tmp_path: Path) -> None:
+    """A raw .csv next to a clean .xlsx still compares correctly."""
+    clean = tmp_path / "hh_clean.xlsx"
+    pd.DataFrame({"id": ["a"]}).to_excel(clean, index=False)
+    raw = _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"]})
+    now = time.time()
+    os.utime(clean, (now, now))
+    os.utime(raw, (now + 86400, now + 86400))
+    _, info, _ = load_scoped(tmp_path, "hh", None)
+    assert info.raw_updated == date.fromtimestamp(now + 86400)
+    assert info.stale_warning is not None
+
+
+def test_load_scoped_stale_check_ignores_unreadable_raw_stat(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A raw file that vanishes between discovery and the mtime check must not crash
+    the report — it is simply treated as "no stale information".
+
+    discover_datasets is patched directly (rather than Path.stat) so the fake failure
+    is scoped to the explicit `raw.stat()` call in _stale_raw_date, not to the
+    is_file() checks discover_datasets itself does while scanning the directory.
+    """
+    clean_path = _write_csv(tmp_path / "hh_clean.csv", {"id": ["a"]})
+
+    class _VanishedRaw:
+        def stat(self):
+            raise OSError("vanished")
+
+    import haa.reporting.sources as sources_mod
+
+    fake_found = {"hh": _VanishedRaw(), "hh_clean": clean_path}
+    monkeypatch.setattr(sources_mod, "discover_datasets", lambda data_dir: fake_found)
+
+    df, info, _ = load_scoped(tmp_path, "hh", None)
+    assert info.raw_updated is None
+    assert info.stale_warning is None
+    assert len(df) == 1  # the clean copy itself still loads fine
+
+
+def test_load_scoped_bool_period_column_is_a_friendly_error(tmp_path: Path) -> None:
+    _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"], "when": [True, False]})
+    period = Period("when", date(2026, 6, 1), date(2026, 8, 31))
+    with pytest.raises(ReportError, match="'when' holds numbers, not dates"):
+        load_scoped(tmp_path, "hh", period)
+
+
 def test_load_scoped_numeric_period_column_is_a_friendly_error(tmp_path: Path) -> None:
     _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"], "when": [20260601, 20260615]})
     period = Period("when", date(2026, 6, 1), date(2026, 8, 31))

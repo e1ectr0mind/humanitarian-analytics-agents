@@ -113,12 +113,21 @@ def resolve_dataset(data_dir: Path, name: str) -> tuple[Path, bool]:
 
 def _stale_raw_date(data_dir: Path, name: str, clean_path: Path) -> date | None:
     """Local-time modification date of the raw file for `name`, when the clean copy in
-    use is older than it; None when there is no such raw file, or it is not newer."""
-    raw = discover_datasets(data_dir).get(name)
+    use is older than it; None when there is no such raw file, it is not newer, or its
+    modification time cannot be read (e.g. it vanished mid-check).
+
+    `name` may itself end with `_clean` (a dataset requested directly by its clean
+    name) — the raw counterpart is `name` with that suffix stripped, not `name` itself.
+    """
+    raw_name = name.removesuffix("_clean")
+    raw = discover_datasets(data_dir).get(raw_name)
     if raw is None or raw == clean_path:
         return None
-    raw_mtime = raw.stat().st_mtime
-    if raw_mtime <= clean_path.stat().st_mtime:
+    try:
+        raw_mtime = raw.stat().st_mtime
+        if raw_mtime <= clean_path.stat().st_mtime:
+            return None
+    except OSError:
         return None
     return datetime.fromtimestamp(raw_mtime).date()
 

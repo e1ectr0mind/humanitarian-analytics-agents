@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ast
+import io
 import re
+import tokenize
 
 import pandas as pd
 
@@ -137,6 +139,38 @@ def _check_node(node: ast.AST, names: list[str]) -> None:
         raise _Refused
 
 
+def _is_row_condition(node: ast.AST) -> bool:
+    """True when the expression yields a per-row True/False mask.
+
+    A bare column, a constant or arithmetic is refused: pandas would try to use its
+    values as row labels and put them in the error text.
+    """
+    if isinstance(node, (ast.Compare, ast.Call)):  # calls are limited by _check_call
+        return True
+    if isinstance(node, ast.BoolOp):
+        return all(_is_row_condition(value) for value in node.values)
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.Not, ast.Invert)):
+        return _is_row_condition(node.operand)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.BitAnd, ast.BitOr)):
+        return _is_row_condition(node.left) and _is_row_condition(node.right)
+    return False
+
+
+def _pandas_booleans(source: str) -> str:
+    """Rewrite `&`/`|` as `and`/`or` the way pandas does before parsing.
+
+    pandas gives `&` and `|` the low precedence of and/or (`a > 1 & b < 2` means
+    `(a > 1) and (b < 2)`), so the validated tree must group operands the same way.
+    """
+    tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+    return tokenize.untokenize(
+        (tokenize.NAME, "and" if tok.string == "&" else "or")
+        if tok.type == tokenize.OP and tok.string in ("&", "|")
+        else (tok.type, tok.string)
+        for tok in tokens
+    )
+
+
 def _validate_filter(df: pd.DataFrame, text: str, pii: list[str]) -> None:
     """Allowlist check of a registry filter before pandas evaluates it.
 
@@ -162,15 +196,17 @@ def _validate_filter(df: pd.DataFrame, text: str, pii: list[str]) -> None:
     if "`" in source or len(text.splitlines()) > 1:
         raise refused
     try:
-        tree = ast.parse(source.strip(), mode="eval")
-    except (SyntaxError, ValueError) as exc:
-        detail = getattr(exc, "msg", None) or str(exc)
+        tree = ast.parse(_pandas_booleans(source.strip()).strip(), mode="eval")
+    except (SyntaxError, ValueError, tokenize.TokenError) as exc:
+        detail = getattr(exc, "msg", None) or "invalid syntax"
         raise NotComputable(f"filter {text!r} failed: {detail}") from None
     except RecursionError:
         raise refused from None
     names: list[str] = []
     try:
         _check_node(tree, names)
+        if not _is_row_condition(tree.body):
+            raise _Refused
     except (_Refused, RecursionError):
         raise refused from None
     columns = {str(c) for c in df.columns}
@@ -197,8 +233,12 @@ def _apply_filter(df: pd.DataFrame, query: object, pii: list[str]) -> pd.DataFra
     try:
         return df.query(text, local_dict={}, global_dict={})
     except Exception as exc:
-        detail = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
-        raise NotComputable(f"filter {text!r} failed: {detail}") from exc
+        # pandas error text can quote cell values, so it is never passed on
+        raise NotComputable(
+            f"filter {text!r} could not be evaluated on this dataset — check with "
+            "profile_dataset that its columns hold the value types it compares "
+            "(.str methods need text columns)"
+        ) from exc
 
 
 def _distinct(df: pd.DataFrame, column: str) -> int:

@@ -109,7 +109,7 @@ def test_category_keys_and_order() -> None:
 # -- filter allowlist ---------------------------------------------------------
 FILTER_DF = pd.DataFrame(
     {
-        "_uuid": ["a", "b", "c", "d"],
+        "_uuid": ["uid-7f3a-01", "uid-7f3a-02", "uid-7f3a-03", "uid-7f3a-04"],
         "head_sex": ["female", "male", "female", None],
         "oblast": ["A", "B", "C", "A"],
         "age": [17, 18, 40, 70],
@@ -142,6 +142,8 @@ def _count(query: str) -> float:
         ("`hh type` == 'idp'", 2),
         ("(age > 17) & ~head_sex.isna()", 2),
         ("(age * 2 > 70) | (oblast == 'B')", 3),
+        # pandas reads & and | as and/or, so this is (age >= 18) and (oblast == 'A')
+        ("age >= 18 & oblast == 'A'", 1),
         ("age > -1", 4),
         ("  age >= 40  ", 2),
     ],
@@ -193,6 +195,46 @@ def test_disallowed_filter_syntax_is_refused(query: str) -> None:
     with pytest.raises(NotComputable) as info:
         _count(query)
     assert "Traceback" not in info.value.reason
+
+
+UUIDS = FILTER_DF["_uuid"].tolist()
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "_uuid",
+        "(_uuid)",
+        "_uuid & oblast == 'A'",
+        "oblast == 'A' or _uuid",
+        "not _uuid",
+        "~age",
+        "age + 1",
+        "'uid'",
+        "['A']",
+    ],
+)
+def test_filter_must_be_a_row_condition(query: str) -> None:
+    with pytest.raises(NotComputable, match="does not allow") as info:
+        _count(query)
+    assert not any(value in info.value.reason for value in UUIDS)
+
+
+def test_filter_evaluation_error_carries_no_cell_values() -> None:
+    # passes the allowlist, fails in pandas: .str on a numeric column
+    with pytest.raises(NotComputable, match="could not be evaluated.*profile_dataset") as info:
+        _count("age.str.contains('9')")
+    assert not any(str(value) in info.value.reason for value in FILTER_DF["age"])
+
+
+def test_filter_evaluation_error_text_is_not_echoed(monkeypatch) -> None:
+    def fail(self, *args, **kwargs):
+        raise KeyError(f"None of [Index({UUIDS!r})] are in the [index]")
+
+    monkeypatch.setattr(pd.DataFrame, "query", fail)
+    with pytest.raises(NotComputable, match="could not be evaluated") as info:
+        _count("oblast == 'A'")
+    assert not any(value in info.value.reason for value in UUIDS)
 
 
 def test_refused_filter_names_the_allowed_syntax() -> None:

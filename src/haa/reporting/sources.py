@@ -87,9 +87,16 @@ def load_scoped(
     path, used_clean = resolve_dataset(data_dir, name)
     try:
         df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
-    except Exception as exc:
+    except OSError as exc:
+        reason = exc.strerror or "the file could not be opened"
         raise ReportError(
-            f"Could not read {path.name}: {exc}. If it is open in Excel, close it and try again."
+            f"Could not read {path.name}: {reason}. If it is open in Excel, close it and try again."
+        ) from exc
+    except Exception as exc:
+        # parser error text can quote cell values, so it is never passed on
+        raise ReportError(
+            f"Could not read {path.name} as a table — open it in Excel, check that it is a "
+            "valid .xlsx or .csv file, save it and try again."
         ) from exc
     pii = detect_pii_columns(df)
     total = len(df)

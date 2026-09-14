@@ -74,6 +74,21 @@ def test_compute_indicators_hides_high_cardinality_breakdowns(
         assert str(value) in oblast_line
 
 
+def test_compute_indicators_bare_column_filter_leaks_no_values(
+    box: ReportToolbox, report_workspace: Path
+) -> None:
+    registry = copy.deepcopy(DEMO_REGISTRY)
+    registry["indicators"][0]["measure"]["filter"] = "_uuid"
+    (report_workspace / "indicators.yaml").write_text(
+        yaml.safe_dump(registry, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    raw = pd.read_excel(report_workspace / "data" / "beneficiaries.xlsx")
+    out = box.compute_indicators()
+    for value in raw["_uuid"].dropna().astype(str):
+        assert value not in out
+    assert "filter '_uuid' uses syntax the report engine does not allow" in out
+
+
 def test_compute_indicators_with_period(box: ReportToolbox) -> None:
     out = box.compute_indicators("submission_date", "2026-06-01", "2026-08-31")
     assert "Period: 2026-06-01 .. 2026-08-31 (by submission_date)" in out

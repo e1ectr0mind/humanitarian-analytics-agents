@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from haa.cli.app import build_parser, run_connect, run_pull, run_report, validate_workspace
 from haa.config import load_config
 
@@ -154,6 +156,16 @@ def test_run_report_bad_period_format(report_workspace: Path) -> None:
     out, ok = run_report(report_workspace, "indicators", "2026-06-01", "submission_date")
     assert ok is False
     assert "START..END" in out
+
+
+@pytest.mark.parametrize("period", ["..", " .. ", "2026-06-01..", "..2026-08-31", ""])
+def test_run_report_period_with_an_empty_side_is_refused(
+    report_workspace: Path, period: str
+) -> None:
+    out, ok = run_report(report_workspace, "indicators", period, "submission_date")
+    assert ok is False
+    assert out == "Use --period START..END, for example 2026-06-01..2026-08-31."
+    assert not list((report_workspace / "reports").glob("indicators_*"))
 
 
 def test_run_report_5w_without_mapping(report_workspace: Path) -> None:

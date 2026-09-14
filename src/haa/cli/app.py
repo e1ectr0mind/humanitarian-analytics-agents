@@ -77,10 +77,13 @@ def run_report(
     from haa.core.tools.reporttools import ReportToolbox
 
     start = end = None
-    if period:
+    if period is not None:
+        usage = "Use --period START..END, for example 2026-06-01..2026-08-31."
         if ".." not in period:
-            return "Use --period START..END, for example 2026-06-01..2026-08-31.", False
+            return usage, False
         start, end = (part.strip() for part in period.split("..", 1))
+        if not (start and end):  # `..` alone would silently report all records
+            return usage, False
     try:
         cfg = load_config(workspace)
     except ConfigError as exc:

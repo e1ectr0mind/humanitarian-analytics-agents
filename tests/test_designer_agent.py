@@ -57,6 +57,8 @@ def test_designer_prompt_carries_registry_schema() -> None:
         "must be real column names from profile_dataset",
         ".isna(), .notna(), .isin([...]), .str.contains/startswith/endswith(...)",
         "backticks for column names with spaces",
+        "no arithmetic is allowed",
+        "only | between alternatives",
     ):
         assert needle in DESIGNER_PROMPT, needle
     assert "numerator: {field: head_sex" not in DESIGNER_PROMPT

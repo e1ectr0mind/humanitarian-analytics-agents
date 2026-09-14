@@ -136,12 +136,18 @@ def _count(query: str) -> float:
         ("oblast.str.startswith('B', na=False)", 1),
         ("oblast.str.endswith('C')", 1),
         ("oblast.str.contains('c', case=False, regex=False)", 1),
+        ("oblast.str.contains('A|B')", 3),
+        ("oblast.str.contains('a', case=False)", 2),
+        ("oblast.str.contains('A', regex=False)", 2),
+        ("oblast.str.startswith('A')", 2),
         ("head_sex.isna()", 1),
         ("not head_sex.notna()", 1),
         ("oblast.isin(['A'])", 2),
         ("`hh type` == 'idp'", 2),
         ("(age > 17) & ~head_sex.isna()", 2),
-        ("(age * 2 > 70) | (oblast == 'B')", 3),
+        # was "(age * 2 > 70) | (oblast == 'B')" — arithmetic is now refused, so this
+        # exercises the same shape (| across two comparisons) without arithmetic.
+        ("(age > 35) | (oblast == 'B')", 3),
         # pandas reads & and | as and/or, so this is (age >= 18) and (oblast == 'A')
         ("age >= 18 & oblast == 'A'", 1),
         ("age > -1", 4),
@@ -189,6 +195,18 @@ def test_filter_cannot_write_files(tmp_path: Path, template: str) -> None:
         "age if age else age",
         "(oblast == 'A'\n or age > 1)",
         "`oblast` == 'A' and `age`` > 1",
+        # arithmetic can exhaust memory (e.g. a huge multiplier) — refused outright
+        "age * 2 > 10",
+        "oblast * 2000000000 == 'x'",
+        "age + 1 > 5",
+        "-age < 0",
+        # regex-like .str.contains patterns can backtrack catastrophically
+        "oblast.str.contains('(a+)+$')",
+        "oblast.str.contains('A.')",
+        "oblast.str.contains('A', regex=True)",
+        "oblast.str.contains('A', False)",
+        "oblast.str.contains('A', case=1)",
+        "oblast.str.startswith('A', 'x')",
     ],
 )
 def test_disallowed_filter_syntax_is_refused(query: str) -> None:

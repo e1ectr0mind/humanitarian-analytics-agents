@@ -14,7 +14,8 @@ PII_NEXT_STEP = "pick another column, or rename it in the clean copy if it is no
 
 _FILTER_HINT = (
     "use comparisons such as \"head_sex == 'female'\", and/or, in [...], .isna(), "
-    ".isin([...]) or .str.contains(...)"
+    ".isin([...]) or .str.contains('a|b') for plain text with | between alternatives "
+    "— no arithmetic"
 )
 # A backtick-quoted column name (pandas syntax) standing alone as a token. Quotes,
 # backslashes, `#` and line breaks are not accepted inside it, so swapping it for a
@@ -22,12 +23,18 @@ _FILTER_HINT = (
 # the same structure as the one pandas parses.
 _BACKTICK_NAME = re.compile(r"(?<![\w`])`([^`'\"\\#\r\n]+)`(?![\w`])")
 _BOOL_OPS = (ast.And, ast.Or)
-_UNARY_OPS = (ast.Not, ast.Invert, ast.USub, ast.UAdd)
-_BIN_OPS = (ast.BitAnd, ast.BitOr, ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod)
+# USub/UAdd are not accepted here: a leading -/+ is allowed only on a numeric
+# constant (handled by _is_constant), never on an arbitrary expression like -age.
+_UNARY_OPS = (ast.Not, ast.Invert)
+_BIN_OPS = (ast.BitAnd, ast.BitOr)
 _COMPARE_OPS = (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In, ast.NotIn)
 _CONSTANT_TYPES = (str, int, float, bool, type(None))
 _STR_METHODS = {"contains", "startswith", "endswith"}
 _CALL_KEYWORDS = {"case", "na", "regex"}
+_ANCHOR_KEYWORDS = {"na"}
+# Characters that make a .str.contains pattern regex-like. `|` is deliberately not
+# here: alternation of literal words cannot backtrack catastrophically.
+_UNSAFE_PATTERN_CHARS = set("\\.^$*+?{}[]()")
 
 
 class NotComputable(Exception):
@@ -89,6 +96,16 @@ def _is_constant_list(node: ast.AST) -> bool:
     return isinstance(node, (ast.List, ast.Tuple)) and all(_is_constant(e) for e in node.elts)
 
 
+def _is_str_constant(node: ast.AST) -> bool:
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def _is_safe_pattern(node: ast.AST) -> bool:
+    """A literal `.str.contains` pattern: `|` may separate literal alternatives, but no
+    other regex metacharacter — those can make matching backtrack catastrophically."""
+    return _is_str_constant(node) and not any(c in _UNSAFE_PATTERN_CHARS for c in node.value)
+
+
 def _check_call(node: ast.Call, names: list[str]) -> None:
     """Only <column>.str.contains/startswith/endswith(...), .isna(), .notna(), .isin([...])."""
     func = node.func
@@ -100,17 +117,33 @@ def _check_call(node: ast.Call, names: list[str]) -> None:
         and func.value.attr == "str"
     ):
         column = func.value.value
-        args_ok = all(_is_constant(arg) for arg in node.args)
+        if func.attr == "contains":
+            args_ok = len(node.args) == 1 and _is_safe_pattern(node.args[0])
+            keywords_ok = all(
+                kw.arg in _CALL_KEYWORDS
+                and _is_constant(kw.value)
+                and (kw.arg != "case" or isinstance(kw.value.value, bool))
+                and (kw.arg != "regex" or kw.value.value is False)
+                for kw in node.keywords
+            )
+        else:
+            args_ok = len(node.args) == 1 and _is_str_constant(node.args[0])
+            keywords_ok = all(
+                kw.arg in _ANCHOR_KEYWORDS and _is_constant(kw.value) for kw in node.keywords
+            )
     elif func.attr in ("isna", "notna"):
         column, args_ok = func.value, not node.args
+        keywords_ok = all(
+            kw.arg in _CALL_KEYWORDS and _is_constant(kw.value) for kw in node.keywords
+        )
     elif func.attr == "isin":
         column = func.value
         args_ok = len(node.args) == 1 and _is_constant_list(node.args[0])
+        keywords_ok = all(
+            kw.arg in _CALL_KEYWORDS and _is_constant(kw.value) for kw in node.keywords
+        )
     else:
         raise _Refused
-    keywords_ok = all(
-        kw.arg in _CALL_KEYWORDS and _is_constant(kw.value) for kw in node.keywords
-    )
     if not (isinstance(column, ast.Name) and args_ok and keywords_ok):
         raise _Refused
     names.append(column.id)

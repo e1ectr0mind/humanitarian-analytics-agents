@@ -1,5 +1,6 @@
 import copy
 import os
+import shutil
 import time
 from datetime import date
 from pathlib import Path
@@ -261,6 +262,23 @@ def test_build_5w_without_period_omits_bad_date_count(box: ReportToolbox) -> Non
     box.save_5w_mapping(MAPPING_YAML)
     out = box.build_5w()
     assert "without a valid date" not in out
+
+
+def test_build_5w_warns_when_clean_copy_is_stale(
+    box: ReportToolbox, report_workspace: Path
+) -> None:
+    raw_path = report_workspace / "data" / "beneficiaries.xlsx"
+    clean_path = report_workspace / "data" / "beneficiaries_clean.xlsx"
+    shutil.copy(raw_path, clean_path)
+    now = time.time()
+    os.utime(clean_path, (now, now))
+    os.utime(raw_path, (now + 86400, now + 86400))
+    box.save_5w_mapping(MAPPING_YAML)
+    out = box.build_5w()
+    assert "5W built:" in out and "(clean copy)" in out
+    warning = next(line for line in out.splitlines() if line.startswith("Warning: "))
+    assert "beneficiaries_clean.xlsx is older than the raw file" in warning
+    assert "re-run the cleaning" in warning
 
 
 def test_build_5w_no_activity_rows_in_scope_warns(box: ReportToolbox) -> None:

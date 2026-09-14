@@ -214,8 +214,11 @@ def _validate_filter(df: pd.DataFrame, text: str, pii: list[str]) -> None:
     """Allowlist check of a registry filter before pandas evaluates it.
 
     Registries are written by an agent from project documents, and pandas query
-    syntax can call arbitrary methods (`_uuid.to_csv(...)`), so only comparisons,
-    boolean logic, simple arithmetic and a few column methods are accepted.
+    syntax can call arbitrary methods (`_uuid.to_csv(...)`), so only comparisons
+    (including `in [...]`), boolean logic (and/or/not, &, |, ~) and a few column
+    methods (.isna, .notna, .isin, and .str.contains/startswith/endswith with plain
+    text) are accepted. Arithmetic is refused (a huge multiplier can exhaust memory);
+    a leading minus or plus is allowed only on a numeric constant.
     """
     refused = NotComputable(
         f"filter {text!r} uses syntax the report engine does not allow — {_FILTER_HINT}"

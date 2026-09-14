@@ -9,6 +9,7 @@ import yaml
 
 from haa.config import HaaConfig
 from haa.core.telemetry import SessionTelemetry
+from haa.core.tools.profiler import MAX_CATEGORY_VALUES
 from haa.indicators.registry import RegistryError, load_registry
 from haa.reporting import fivew
 from haa.reporting.engine import ReportRun, evaluate_registry
@@ -51,7 +52,6 @@ PERIOD_SCHEMA = {
     "required": [],
 }
 
-MAX_CATEGORIES_IN_SUMMARY = 30
 _WRITE_FAILED = (
     "Could not write the report files: {detail}. "
     "If a report .xlsx is open in Excel, close it and try again."
@@ -85,19 +85,21 @@ def run_summary(run: ReportRun) -> str:
             f"{target}{progress}"
         )
         for dimension, rows in r.breakdowns.items():
-            shown = rows[:MAX_CATEGORIES_IN_SUMMARY]
+            # Same rule as profile_dataset: category values of a high-cardinality
+            # column (IDs, dates, free text) never reach the LLM.
+            if len(rows) > MAX_CATEGORY_VALUES:
+                lines.append(
+                    f"    by {dimension}: {len(rows)} categories — too many to list here; "
+                    "see the report file"
+                )
+                continue
             parts = [
                 f"{row.category} {format_value(row.value, r.unit)}"
                 if row.reason is None
                 else f"{row.category} n/a ({row.reason})"
-                for row in shown
+                for row in rows
             ]
-            more = (
-                f"; and {len(rows) - len(shown)} more (see the report file)"
-                if len(rows) > len(shown)
-                else ""
-            )
-            lines.append(f"    by {dimension}: {'; '.join(parts)}{more}")
+            lines.append(f"    by {dimension}: {'; '.join(parts)}")
         for dimension, reason in r.breakdown_errors.items():
             lines.append(f"    by {dimension}: not available — {reason}")
     lines.append(f"Not computable ({len(run.not_computable)}):")

@@ -1,3 +1,4 @@
+import copy
 from datetime import date
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import yaml
 from haa.config import load_config
 from haa.core.telemetry import SessionTelemetry
 from haa.core.tools.reporttools import PERIOD_SCHEMA, REPORT_TOOL_NAMES, ReportToolbox
+from tests.conftest import DEMO_REGISTRY
 from tests.test_reporting_mapping import VALID_MAPPING
 
 TODAY = date(2026, 9, 14)
@@ -51,6 +53,25 @@ def test_compute_indicators_summary(box: ReportToolbox) -> None:
     assert "by oblast:" in out and "by head_sex:" in out
     assert "Not computable (1):" in out and "no measure block" in out
     assert not list(box.config.reports_dir.iterdir())  # preview only, no files
+
+
+def test_compute_indicators_hides_high_cardinality_breakdowns(
+    box: ReportToolbox, report_workspace: Path
+) -> None:
+    registry = copy.deepcopy(DEMO_REGISTRY)
+    registry["indicators"][0]["disaggregation"] = ["_uuid", "oblast"]
+    (report_workspace / "indicators.yaml").write_text(
+        yaml.safe_dump(registry, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    raw = pd.read_excel(report_workspace / "data" / "beneficiaries.xlsx")
+    out = box.compute_indicators()
+    for value in raw["_uuid"].dropna().astype(str):
+        assert value not in out
+    categories = raw["_uuid"].nunique() + int(raw["_uuid"].isna().any())
+    assert f"by _uuid: {categories} categories — too many to list here; see the report file" in out
+    oblast_line = next(line for line in out.splitlines() if "by oblast:" in line)
+    for value in raw["oblast"].dropna().unique():
+        assert str(value) in oblast_line
 
 
 def test_compute_indicators_with_period(box: ReportToolbox) -> None:

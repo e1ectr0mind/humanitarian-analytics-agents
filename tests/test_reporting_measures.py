@@ -1,4 +1,5 @@
 import copy
+from pathlib import Path
 
 import pandas as pd
 import pytest
@@ -103,3 +104,113 @@ def test_category_keys_and_order() -> None:
     keys = category_keys(pd.Series(["b", None, "a", "b"]))
     assert keys.tolist() == ["b", MISSING, "a", "b"]
     assert ordered_categories(keys) == ["a", "b", MISSING]
+
+
+# -- filter allowlist ---------------------------------------------------------
+FILTER_DF = pd.DataFrame(
+    {
+        "_uuid": ["a", "b", "c", "d"],
+        "head_sex": ["female", "male", "female", None],
+        "oblast": ["A", "B", "C", "A"],
+        "age": [17, 18, 40, 70],
+        "hh type": ["idp", "host", "idp", "host"],
+        "resp_phone": ["+380 1", "+380 2", "+380 3", "+380 4"],
+        "resp phone": ["+380 1", "+380 2", "+380 3", "+380 4"],
+    }
+)
+FILTER_PII = ["resp_phone", "resp phone"]
+
+
+def _count(query: str) -> float:
+    return evaluate_measure(FILTER_DF, {"aggregation": "count", "filter": query}, FILTER_PII)
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("head_sex == 'female'", 2),
+        ("age >= 18 and oblast == 'A'", 1),
+        ("oblast in ['A', 'B']", 3),
+        ("oblast not in ('A',)", 2),
+        ("oblast.str.contains('A')", 2),
+        ("oblast.str.startswith('B', na=False)", 1),
+        ("oblast.str.endswith('C')", 1),
+        ("oblast.str.contains('c', case=False, regex=False)", 1),
+        ("head_sex.isna()", 1),
+        ("not head_sex.notna()", 1),
+        ("oblast.isin(['A'])", 2),
+        ("`hh type` == 'idp'", 2),
+        ("(age > 17) & ~head_sex.isna()", 2),
+        ("(age * 2 > 70) | (oblast == 'B')", 3),
+        ("age > -1", 4),
+        ("  age >= 40  ", 2),
+    ],
+)
+def test_allowed_filters_still_work(query: str, expected: int) -> None:
+    assert _count(query) == expected
+
+
+@pytest.mark.parametrize(
+    "template",
+    [
+        "@df.to_csv('{path}')",
+        "_uuid.to_csv('{path}')",
+        "oblast == 'A' or _uuid.to_csv('{path}')",
+        # backticks inside quotes must not hide the call from the validator
+        "oblast == '`' or _uuid.to_csv('{path}') or '`'",
+    ],
+    ids=["engine-local-df", "series-method", "series-method-in-or", "backticks-in-quotes"],
+)
+def test_filter_cannot_write_files(tmp_path: Path, template: str) -> None:
+    target = tmp_path / "leak.csv"
+    with pytest.raises(NotComputable):
+        _count(template.format(path=target.as_posix()))
+    assert not target.exists()
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "age > @x",
+        "age > @pii.__len__()",
+        "age @ age",
+        "oblast.__class__ == oblast.__class__",
+        "oblast.values == 'A'",
+        "oblast.str.len() > 1",
+        "oblast.str.contains(oblast)",
+        "oblast.str.contains('A', flags=2)",
+        "oblast.isin(oblast)",
+        "oblast.isin([oblast])",
+        "Timestamp('2026-01-01') < age",
+        "age ** 2 > 4",
+        "oblast[0] == 'A'",
+        "age if age else age",
+        "(oblast == 'A'\n or age > 1)",
+        "`oblast` == 'A' and `age`` > 1",
+    ],
+)
+def test_disallowed_filter_syntax_is_refused(query: str) -> None:
+    with pytest.raises(NotComputable) as info:
+        _count(query)
+    assert "Traceback" not in info.value.reason
+
+
+def test_refused_filter_names_the_allowed_syntax() -> None:
+    with pytest.raises(NotComputable, match="does not allow.*head_sex == 'female'"):
+        _count("oblast.str.len() > 1")
+
+
+def test_filter_names_must_be_dataset_columns() -> None:
+    with pytest.raises(NotComputable, match="'sex'.*profile_dataset"):
+        _count("sex == 'female'")
+
+
+def test_filter_cannot_reach_pii_column_through_pandas_cleaned_name() -> None:
+    # pandas resolves this identifier to the column "resp phone"
+    with pytest.raises(NotComputable):
+        _count("BACKTICK_QUOTED_STRING_resp_phone == '+380 1'")
+
+
+def test_backticked_pii_column_refused() -> None:
+    with pytest.raises(NotComputable, match="personal data"):
+        _count("`resp phone` == '+380 1'")

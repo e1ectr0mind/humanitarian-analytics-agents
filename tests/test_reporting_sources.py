@@ -1,3 +1,5 @@
+import os
+import time
 from datetime import date
 from pathlib import Path
 
@@ -8,6 +10,7 @@ from haa.reporting.sources import (
     DatasetNotFound,
     Period,
     ReportError,
+    SourceInfo,
     load_scoped,
     parse_period,
     resolve_dataset,
@@ -153,6 +156,46 @@ def test_load_scoped_refuses_pii_period_column(demo_workspace: Path) -> None:
     period = Period("resp_name", date(2026, 6, 1), date(2026, 8, 31))
     with pytest.raises(ReportError, match="'resp_name'.*personal data.*pick another"):
         load_scoped(demo_workspace / "data", "beneficiaries", period)
+
+
+def test_copy_label() -> None:
+    clean = SourceInfo("hh", Path("hh_clean.csv"), True, 1, 1, 0, 0)
+    raw = SourceInfo("hh", Path("hh.csv"), False, 1, 1, 0, 0)
+    assert clean.copy_label == "clean"
+    assert raw.copy_label == "raw"
+
+
+def test_load_scoped_stale_clean_copy_warns(tmp_path: Path) -> None:
+    clean = _write_csv(tmp_path / "hh_clean.csv", {"id": ["a"]})
+    raw = _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"]})
+    now = time.time()
+    os.utime(clean, (now, now))
+    os.utime(raw, (now + 86400, now + 86400))
+    _, info, _ = load_scoped(tmp_path, "hh", None)
+    assert info.used_clean is True
+    assert info.raw_updated == date.fromtimestamp(now + 86400)
+    assert info.stale_warning is not None
+    assert "hh_clean.csv" in info.stale_warning
+    assert info.raw_updated.isoformat() in info.stale_warning
+    assert "re-run the cleaning" in info.stale_warning
+
+
+def test_load_scoped_clean_copy_not_stale_when_newer(tmp_path: Path) -> None:
+    clean = _write_csv(tmp_path / "hh_clean.csv", {"id": ["a"]})
+    raw = _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"]})
+    now = time.time()
+    os.utime(raw, (now, now))
+    os.utime(clean, (now + 86400, now + 86400))
+    _, info, _ = load_scoped(tmp_path, "hh", None)
+    assert info.raw_updated is None
+    assert info.stale_warning is None
+
+
+def test_load_scoped_no_raw_file_no_stale_warning(tmp_path: Path) -> None:
+    _write_csv(tmp_path / "hh_clean.csv", {"id": ["a"]})
+    _, info, _ = load_scoped(tmp_path, "hh", None)
+    assert info.raw_updated is None
+    assert info.stale_warning is None
 
 
 def test_load_scoped_handles_utc_offset_timestamps(tmp_path: Path) -> None:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +39,21 @@ class SourceInfo:
     rows_excluded_by_period: int
     rows_bad_date: int
     listable_columns: frozenset[str] = field(default_factory=frozenset)
+    raw_updated: date | None = None
+
+    @property
+    def copy_label(self) -> str:
+        return "clean" if self.used_clean else "raw"
+
+    @property
+    def stale_warning(self) -> str | None:
+        if self.raw_updated is None:
+            return None
+        return (
+            f"The clean copy {self.path.name} is older than the raw file (updated "
+            f"{self.raw_updated.isoformat()}) — records added since the last cleaning "
+            "are not in this report; re-run the cleaning to include them."
+        )
 
 
 def parse_period(date_field: str | None, start: str | None, end: str | None) -> Period | None:
@@ -82,10 +97,23 @@ def resolve_dataset(data_dir: Path, name: str) -> tuple[Path, bool]:
     raise DatasetNotFound(f"Dataset {name!r} not found in workspace/data/. Available: {known}")
 
 
+def _stale_raw_date(data_dir: Path, name: str, clean_path: Path) -> date | None:
+    """Local-time modification date of the raw file for `name`, when the clean copy in
+    use is older than it; None when there is no such raw file, or it is not newer."""
+    raw = discover_datasets(data_dir).get(name)
+    if raw is None or raw == clean_path:
+        return None
+    raw_mtime = raw.stat().st_mtime
+    if raw_mtime <= clean_path.stat().st_mtime:
+        return None
+    return datetime.fromtimestamp(raw_mtime).date()
+
+
 def load_scoped(
     data_dir: Path, name: str, period: Period | None
 ) -> tuple[pd.DataFrame, SourceInfo, list[str]]:
     path, used_clean = resolve_dataset(data_dir, name)
+    raw_updated = _stale_raw_date(data_dir, name, path) if used_clean else None
     try:
         df = pd.read_csv(path) if path.suffix.lower() == ".csv" else pd.read_excel(path)
     except OSError as exc:
@@ -130,5 +158,6 @@ def load_scoped(
         rows_excluded_by_period=total - len(df),
         rows_bad_date=bad_dates,
         listable_columns=listable,
+        raw_updated=raw_updated,
     )
     return df, info, pii

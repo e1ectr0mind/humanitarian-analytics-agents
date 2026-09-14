@@ -89,7 +89,7 @@ def _write_table(ws, header: list[str], rows: list[list[object]]) -> None:
 def _source_rows(sources: dict[str, SourceInfo]) -> list[list[object]]:
     return [
         [
-            s.dataset, s.path.name, "clean" if s.used_clean else "raw", s.rows_total,
+            s.dataset, s.path.name, s.copy_label, s.rows_total,
             s.rows_in_scope, s.rows_excluded_by_period, s.rows_bad_date,
         ]
         for s in sources.values()
@@ -109,6 +109,8 @@ def render_indicator_report(
     if run.sources:
         lines += ["## Sources", "", *_md_table(SOURCE_HEADER, _source_rows(run.sources)), ""]
         for source in run.sources.values():
+            if source.stale_warning:
+                lines += [f"> **Warning:** {source.stale_warning}", ""]
             if source.rows_in_scope == 0:
                 lines += [
                     f"> **Warning:** no rows in scope for {source.dataset} — its indicators "
@@ -170,6 +172,9 @@ def render_indicator_report(
     about.append(["Period", _xl(period_label(run.period))])
     about.append([None])
     _write_table(about, SOURCE_HEADER, _source_rows(run.sources))
+    for source in run.sources.values():
+        if source.stale_warning:
+            about.append([_xl("Warning"), _xl(source.stale_warning)])
     breakdown_errors = [
         [f"Breakdown not computed: {r.code} by {dimension}", reason]
         for r in run.computed
@@ -202,7 +207,7 @@ def render_5w(
     generated: date,
     md_row_cap: int = 200,
 ) -> None:
-    copy = "clean" if source.used_clean else "raw"
+    copy = source.copy_label
     lines = [
         "# 5W report",
         "",
@@ -211,8 +216,10 @@ def render_5w(
         f"Period: {period_label(period)}",
         f"Rows in scope: {source.rows_in_scope} (excluded by period: "
         f"{source.rows_excluded_by_period}; rows without a valid date: {source.rows_bad_date})",
-        "",
     ]
+    if source.stale_warning:
+        lines += ["", f"> **Warning:** {source.stale_warning}"]
+    lines.append("")
     if not table.rows:
         lines += ["> **Warning:** no activity rows in scope — the table is empty.", ""]
     shown = table.rows[:md_row_cap]
@@ -241,7 +248,7 @@ def render_5w(
     _write_table(ws, table.columns, [[row[c] for c in table.columns] for row in table.rows])
     ws.freeze_panes = "A2"
     about = wb.create_sheet("About")
-    for label, value in [
+    about_rows = [
         ("Generated", generated.isoformat()),
         ("Period", period_label(period)),
         ("Dataset", source.dataset),
@@ -252,7 +259,10 @@ def render_5w(
         ("Rows without a valid date", source.rows_bad_date),
         (f"Unique reach (distinct {table.id_field})", table.unique_reach),
         ("Records without any activity", table.rows_without_activity),
-    ]:
+    ]
+    if source.stale_warning:
+        about_rows.append(("Warning", source.stale_warning))
+    for label, value in about_rows:
         about.append([_xl(label), _xl(value)])
     xlsx_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(xlsx_path)

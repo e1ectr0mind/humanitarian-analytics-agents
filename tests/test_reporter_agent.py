@@ -36,6 +36,12 @@ def test_reporter_prompt_discipline() -> None:
         assert needle in text, needle
 
 
+def test_reporter_prompt_mentions_clean_copy_guidance() -> None:
+    text = REPORTER_PROMPT.lower()
+    for needle in ("clean copy", "re-running the cleaning", "_clean"):
+        assert needle in text, needle
+
+
 def test_reporter_prompt_carries_5w_schema() -> None:
     for needle in (
         "exactly these keys", "fixed:", "where: [oblast, raion, hromada]",

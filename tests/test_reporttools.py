@@ -1,5 +1,7 @@
 import copy
+import os
 import re
+import time
 from datetime import date
 from pathlib import Path
 
@@ -127,6 +129,34 @@ def test_compute_indicators_with_period(box: ReportToolbox) -> None:
     out = box.compute_indicators("submission_date", "2026-06-01", "2026-08-31")
     assert "Period: 2026-06-01 .. 2026-08-31 (by submission_date)" in out
     assert "excluded by period" in out
+    assert "without a valid date" in out
+
+
+def test_compute_indicators_without_period_omits_bad_date_count(box: ReportToolbox) -> None:
+    out = box.compute_indicators()
+    assert "without a valid date" not in out
+
+
+def test_compute_indicators_period_with_no_rows_warns(box: ReportToolbox) -> None:
+    out = box.compute_indicators("submission_date", "2030-01-01", "2030-01-02")
+    assert (
+        "Warning: no rows in scope for beneficiaries — its indicators are 0 or not "
+        "computable."
+    ) in out
+
+
+def test_compute_indicators_warns_when_clean_copy_is_stale(
+    box: ReportToolbox, report_workspace: Path
+) -> None:
+    raw_path = report_workspace / "data" / "beneficiaries.xlsx"
+    clean_path = report_workspace / "data" / "beneficiaries_clean.xlsx"
+    pd.read_excel(raw_path).to_excel(clean_path, index=False)
+    now = time.time()
+    os.utime(clean_path, (now, now))
+    os.utime(raw_path, (now + 86400, now + 86400))
+    out = box.compute_indicators()
+    assert "beneficiaries_clean.xlsx is older than the raw file" in out
+    assert "re-run the cleaning" in out
 
 
 def test_compute_indicators_bad_period_is_friendly(box: ReportToolbox) -> None:
@@ -216,6 +246,24 @@ def test_build_5w_writes_files_and_logs(box: ReportToolbox) -> None:
 def test_build_5w_period_defaults_to_when_field(box: ReportToolbox) -> None:
     box.save_5w_mapping(MAPPING_YAML)
     assert "by submission_date" in box.build_5w(None, "2026-06-01", "2026-08-31")
+
+
+def test_build_5w_with_period_shows_bad_date_count(box: ReportToolbox) -> None:
+    box.save_5w_mapping(MAPPING_YAML)
+    out = box.build_5w(None, "2026-06-01", "2026-08-31")
+    assert "without a valid date" in out
+
+
+def test_build_5w_without_period_omits_bad_date_count(box: ReportToolbox) -> None:
+    box.save_5w_mapping(MAPPING_YAML)
+    out = box.build_5w()
+    assert "without a valid date" not in out
+
+
+def test_build_5w_no_activity_rows_in_scope_warns(box: ReportToolbox) -> None:
+    box.save_5w_mapping(MAPPING_YAML)
+    out = box.build_5w(None, "2030-01-01", "2030-01-02")
+    assert "Warning: no activity rows in scope — the table is empty." in out
 
 
 def test_build_5w_keeps_labels_for_listable_disaggregation(box: ReportToolbox) -> None:

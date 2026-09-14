@@ -90,12 +90,21 @@ def run_summary(run: ReportRun) -> str:
     """Plain-text digest of a report run: aggregates only, never rows."""
     lines = [f"Period: {period_label(run.period)}"]
     for source in run.sources.values():
-        copy = "clean" if source.used_clean else "raw"
-        lines.append(
-            f"Source {source.dataset}: {source.path.name} ({copy} copy), "
-            f"{source.rows_in_scope} rows in scope, "
-            f"{source.rows_excluded_by_period} excluded by period"
+        bad_date = (
+            f", {source.rows_bad_date} without a valid date" if run.period is not None else ""
         )
+        lines.append(
+            f"Source {source.dataset}: {source.path.name} ({source.copy_label} copy), "
+            f"{source.rows_in_scope} rows in scope, "
+            f"{source.rows_excluded_by_period} excluded by period{bad_date}"
+        )
+        if source.rows_in_scope == 0:
+            lines.append(
+                f"Warning: no rows in scope for {source.dataset} — its indicators are 0 "
+                "or not computable."
+            )
+        if source.stale_warning:
+            lines.append(f"Warning: {source.stale_warning}")
     lines.append(f"Computed ({len(run.computed)}):")
     for r in run.computed:
         target = f", target {format_value(r.target, r.unit)}" if r.target is not None else ""
@@ -258,19 +267,24 @@ class ReportToolbox:
             unique_reach=table.unique_reach,
             paths=[md_path.name, xlsx_path.name],
         )
-        copy = "clean" if source.used_clean else "raw"
         dimensions = list(mapping["whom"].get("disaggregation") or [])
         display_columns = _five_w_display_columns(
             table.columns, dimensions, source.listable_columns
         )
-        return (
-            f"5W built: {len(table.rows)} rows; columns: {', '.join(display_columns)}.\n"
+        bad_date = f", {source.rows_bad_date} without a valid date" if period is not None else ""
+        lines = [
+            f"5W built: {len(table.rows)} rows; columns: {', '.join(display_columns)}.",
             f"Unique reach (distinct {table.id_field}): {table.unique_reach}; "
-            f"records without any activity: {table.rows_without_activity}.\n"
-            f"Period: {period_label(period)}; source {source.path.name} ({copy} copy), "
-            f"{source.rows_in_scope} rows in scope.\n"
-            f"Report files: reports/{md_path.name}, reports/{xlsx_path.name}"
-        )
+            f"records without any activity: {table.rows_without_activity}.",
+            f"Period: {period_label(period)}; source {source.path.name} "
+            f"({source.copy_label} copy), {source.rows_in_scope} rows in scope{bad_date}.",
+        ]
+        if not table.rows:
+            lines.append("Warning: no activity rows in scope — the table is empty.")
+        if source.stale_warning:
+            lines.append(f"Warning: {source.stale_warning}")
+        lines.append(f"Report files: reports/{md_path.name}, reports/{xlsx_path.name}")
+        return "\n".join(lines)
 
 
 def build_reports_server(box: ReportToolbox):

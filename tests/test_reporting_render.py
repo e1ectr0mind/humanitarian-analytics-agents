@@ -84,6 +84,18 @@ TABLE = FiveWTable(
 )
 
 
+STALE_SOURCE = SourceInfo(
+    dataset="beneficiaries",
+    path=Path("data/beneficiaries_clean.xlsx"),
+    used_clean=True,
+    rows_total=3030,
+    rows_in_scope=3000,
+    rows_excluded_by_period=30,
+    rows_bad_date=2,
+    raw_updated=date(2026, 9, 10),
+)
+
+
 def _paths(tmp_path: Path, kind: str) -> tuple[Path, Path]:
     return report_paths(tmp_path / "reports", kind, GENERATED)
 
@@ -128,6 +140,15 @@ def test_indicator_markdown_without_period_and_empty_scope(tmp_path: Path) -> No
     assert "no rows in scope for beneficiaries" in text
 
 
+def test_indicator_markdown_shows_stale_warning(tmp_path: Path) -> None:
+    run = ReportRun(period=PERIOD, sources={"beneficiaries": STALE_SOURCE}, results=RUN.results)
+    md, xlsx = _paths(tmp_path, "indicators")
+    render_indicator_report(run, md, xlsx, GENERATED)
+    text = md.read_text(encoding="utf-8")
+    assert "beneficiaries_clean.xlsx is older than the raw file" in text
+    assert "2026-09-10" in text
+
+
 def test_indicator_xlsx(tmp_path: Path) -> None:
     md, xlsx = _paths(tmp_path, "indicators")
     render_indicator_report(RUN, md, xlsx, GENERATED)
@@ -148,6 +169,16 @@ def test_indicator_xlsx(tmp_path: Path) -> None:
     assert about[4] == ["beneficiaries", "beneficiaries_clean.xlsx", "clean", 3030, 3000, 30, 2]
     assert wb["About"]["A4"].font.bold
     assert _rows(wb["oblast"])[1:] == [["1.1", "Донецька", 400, None], ["1.1", MISSING, 5, None]]
+
+
+def test_indicator_xlsx_lists_stale_warning_in_about(tmp_path: Path) -> None:
+    run = ReportRun(period=PERIOD, sources={"beneficiaries": STALE_SOURCE}, results=RUN.results)
+    md, xlsx = _paths(tmp_path, "indicators")
+    render_indicator_report(run, md, xlsx, GENERATED)
+    about = _rows(openpyxl.load_workbook(xlsx)["About"])
+    warning_rows = [r for r in about if r[0] == "Warning"]
+    assert len(warning_rows) == 1
+    assert "older than the raw file" in warning_rows[0][1]
 
 
 def test_indicator_xlsx_lists_breakdown_errors_in_about(tmp_path: Path) -> None:
@@ -243,6 +274,21 @@ def test_5w_xlsx_strips_illegal_characters(tmp_path: Path) -> None:
         ["Organization", "Activity", "Beneficiaries", "head_sex=female"],
         ["IMC", "cashhealth", 1, 1],
     ]
+
+
+def test_5w_markdown_shows_stale_warning(tmp_path: Path) -> None:
+    md, xlsx = _paths(tmp_path, "5w")
+    render_5w(TABLE, STALE_SOURCE, PERIOD, md, xlsx, GENERATED)
+    text = md.read_text(encoding="utf-8")
+    assert "beneficiaries_clean.xlsx is older than the raw file" in text
+    assert "2026-09-10" in text
+
+
+def test_5w_xlsx_lists_stale_warning_in_about(tmp_path: Path) -> None:
+    md, xlsx = _paths(tmp_path, "5w")
+    render_5w(TABLE, STALE_SOURCE, PERIOD, md, xlsx, GENERATED)
+    about = {r[0]: r[1] for r in _rows(openpyxl.load_workbook(xlsx)["About"])}
+    assert "older than the raw file" in about["Warning"]
 
 
 def test_5w_empty_table_warns(tmp_path: Path) -> None:

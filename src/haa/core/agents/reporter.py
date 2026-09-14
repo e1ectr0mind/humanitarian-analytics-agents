@@ -53,6 +53,12 @@ Indicator progress report:
       id_field: _uuid                  # unique beneficiary / household ID
       disaggregation: [head_sex]       # optional SADD columns
 
+Clean-copy freshness:
+- If a tool result carries a clean-copy warning (the clean copy is older than the raw
+  file), tell the user and suggest re-running the cleaning before sharing the report.
+- When list_datasets shows both a dataset and its <name>_clean counterpart, profile
+  the _clean one — the report engine always reads the clean copy when present.
+
 Reporting period:
 - If the user names a period ("for August", "June to August 2026"), pass start
   and end as YYYY-MM-DD, plus date_field for the indicator report (the 5W

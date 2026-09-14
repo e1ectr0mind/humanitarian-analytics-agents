@@ -108,17 +108,29 @@ take an optional reporting period, and also run without the LLM (no API key):
 
 ## Architecture
 
-    CLI (rich REPL)
-      └─ AnalyticsSession  ──ClaudeAgentOptions──►  Claude Agent SDK
-           ├─ orchestrator (main loop) ──delegates──► analyst subagent
-           ├─ PreToolUse PII hook (deny raw-data reads)
-           ├─ in-process MCP server: list_datasets / profile_dataset /
-           │    run_analysis / list_project_docs / read_project_doc
-           └─ telemetry (JSONL: every turn, tool call, code snippet, cost)
-                     │
-                     ▼
-           local sandbox subprocess (no network, workspace-only,
-           PII-stripping load_dataset, output guard)
+    CLI
+      ├─ `haa chat` ─► AnalyticsSession ──ClaudeAgentOptions──► Claude Agent SDK
+      │        ├─ orchestrator (main loop) ──delegates──►┬─ analyst subagent
+      │        │                                         ├─ cleaner subagent
+      │        │                                         ├─ designer subagent
+      │        │                                         └─ reporter subagent
+      │        ├─ PreToolUse PII hook (deny raw-data reads)
+      │        ├─ telemetry (JSONL: every turn, tool call, code snippet, cost)
+      │        └─ four in-process MCP servers:
+      │             ├─ data    — list_datasets / profile_dataset / run_analysis /
+      │             │             list_project_docs / read_project_doc
+      │             ├─ sources — list_connections / list_remote_forms / pull_form
+      │             ├─ forms   — list_local_forms / load_form / save_form /
+      │             │             read_indicators / save_indicators
+      │             └─ reports — compute_indicators / build_indicator_report /
+      │                           read_5w_mapping / save_5w_mapping / build_5w
+      │                  │
+      │                  ▼
+      │        local sandbox subprocess (no network, workspace-only,
+      │        PII-stripping load_dataset, output guard) — used by the
+      │        analyst and cleaner via `run_analysis`
+      └─ `haa report` ─► the same deterministic reports engine directly,
+               no LLM/API key involved, exit code 0/1 for scripting
 
 ## Cost control
 

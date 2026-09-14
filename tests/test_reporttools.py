@@ -274,6 +274,15 @@ def test_build_5w_keeps_labels_for_listable_disaggregation(box: ReportToolbox) -
     assert "head_sex=male" in columns_line
 
 
+def test_build_5w_numeric_when_field_is_a_friendly_error(box: ReportToolbox) -> None:
+    mapping = copy.deepcopy(VALID_MAPPING)
+    mapping["when"]["field"] = "hh_size"  # numeric column in the demo dataset
+    box.save_5w_mapping(yaml.safe_dump(mapping, allow_unicode=True, sort_keys=False))
+    out = box.build_5w()
+    assert "'hh_size' holds numbers, not dates" in out
+    assert "Traceback" not in out
+
+
 def test_build_5w_collapses_labels_for_non_listable_disaggregation(
     box: ReportToolbox, report_workspace: Path
 ) -> None:

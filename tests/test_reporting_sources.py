@@ -198,6 +198,21 @@ def test_load_scoped_no_raw_file_no_stale_warning(tmp_path: Path) -> None:
     assert info.stale_warning is None
 
 
+def test_load_scoped_numeric_period_column_is_a_friendly_error(tmp_path: Path) -> None:
+    _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"], "when": [20260601, 20260615]})
+    period = Period("when", date(2026, 6, 1), date(2026, 8, 31))
+    with pytest.raises(ReportError, match="'when' holds numbers, not dates"):
+        load_scoped(tmp_path, "hh", period)
+
+
+def test_load_scoped_all_empty_numeric_period_column_is_not_an_error(tmp_path: Path) -> None:
+    _write_csv(tmp_path / "hh.csv", {"id": ["a", "b"], "when": [None, None]})
+    period = Period("when", date(2026, 6, 1), date(2026, 8, 31))
+    df, info, _ = load_scoped(tmp_path, "hh", period)
+    assert len(df) == 0
+    assert info.rows_bad_date == 2
+
+
 def test_load_scoped_handles_utc_offset_timestamps(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "hh.csv",

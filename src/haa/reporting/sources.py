@@ -86,6 +86,20 @@ def parse_dates(series: pd.Series) -> pd.Series:
     return parsed.dt.tz_convert(None)
 
 
+def check_not_numeric_date(series: pd.Series, name: str) -> None:
+    """Refuse a numeric 'date' column with a friendly error.
+
+    A numeric dtype (including bool) parses under pd.to_datetime as a nonsense epoch
+    date rather than becoming NaT, so it must be checked before parsing. A column that
+    is entirely empty is not an error — its rows simply have no valid date.
+    """
+    if pd.api.types.is_numeric_dtype(series) and series.notna().any():
+        raise ReportError(
+            f"Column {name!r} holds numbers, not dates — pick a date column "
+            "(profile_dataset shows each column's type)."
+        )
+
+
 def resolve_dataset(data_dir: Path, name: str) -> tuple[Path, bool]:
     found = discover_datasets(data_dir)
     clean = found.get(f"{name}_clean")
@@ -143,6 +157,7 @@ def load_scoped(
                 "filter by it — pick another date column, or rename it in the clean copy if "
                 "it is not personal data."
             )
+        check_not_numeric_date(df[period.field], period.field)
         dates = parse_dates(df[period.field])
         bad_dates = int(dates.isna().sum())
         start = pd.Timestamp(period.start)

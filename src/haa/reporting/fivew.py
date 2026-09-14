@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from haa.reporting.measures import category_keys, ordered_categories
-from haa.reporting.sources import ReportError, parse_dates
+from haa.reporting.sources import ReportError, check_not_numeric_date, parse_dates
 
 
 @dataclass(frozen=True)
@@ -61,6 +61,7 @@ def build_5w(df: pd.DataFrame, mapping: dict, pii: list[str]) -> FiveWTable:
         work[column] = category_keys(df[column])
     keys = list(where)
     if when.get("granularity", "month") == "month":
+        check_not_numeric_date(df[when["field"]], when["field"])
         dates = parse_dates(df[when["field"]])
         work["Period"] = category_keys(dates.dt.strftime("%Y-%m"))
         keys.append("Period")

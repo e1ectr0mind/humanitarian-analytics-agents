@@ -79,6 +79,13 @@ def test_granularity_none_drops_period() -> None:
     assert len(table.rows) == 4
 
 
+def test_when_field_numeric_is_a_friendly_error() -> None:
+    df = DF.copy()
+    df["submission_date"] = [20260603, 20260620, 20260701, 20260702, 20260715]
+    with pytest.raises(ReportError, match="'submission_date' holds numbers, not dates"):
+        build_5w(df, MAPPING, PII)
+
+
 def test_missing_column_raises() -> None:
     mapping = copy.deepcopy(MAPPING)
     mapping["where"] = ["raion"]

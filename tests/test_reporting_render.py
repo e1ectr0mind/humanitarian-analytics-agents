@@ -150,6 +150,33 @@ def test_indicator_xlsx(tmp_path: Path) -> None:
     assert _rows(wb["oblast"])[1:] == [["1.1", "Донецька", 400, None], ["1.1", MISSING, 5, None]]
 
 
+def test_indicator_xlsx_lists_breakdown_errors_in_about(tmp_path: Path) -> None:
+    md, xlsx = _paths(tmp_path, "indicators")
+    render_indicator_report(RUN, md, xlsx, GENERATED)
+    about = [row[:2] for row in _rows(openpyxl.load_workbook(xlsx)["About"])]
+    assert about[5:] == [
+        [None, None],
+        [
+            "Breakdown not computed: 1.1 by sex",
+            "column 'sex' not found in the dataset — check profile_dataset",
+        ],
+    ]
+
+
+def test_indicator_xlsx_strips_illegal_characters(tmp_path: Path) -> None:
+    result = IndicatorResult(
+        code="1", name={"uk": "a", "en": "b"}, dataset="beneficiaries", target=None,
+        unit=None, actual=1.0, progress_pct=None, status="computed",
+        breakdowns={"oblast\x0b": [BreakdownRow("Донецька\x0bобл", 1.0)]},
+    )
+    run = ReportRun(period=None, sources={"beneficiaries": SOURCE}, results=[result])
+    md, xlsx = _paths(tmp_path, "indicators")
+    render_indicator_report(run, md, xlsx, GENERATED)
+    wb = openpyxl.load_workbook(xlsx)
+    assert wb.sheetnames == ["Summary", "About", "oblast"]
+    assert _rows(wb["oblast"])[1] == ["1", "Донецькаобл", 1, None]
+
+
 def test_sheet_titles_are_sanitized_and_unique(tmp_path: Path) -> None:
     result = RUN.results[0]
     run = ReportRun(
@@ -199,6 +226,23 @@ def test_5w_xlsx(tmp_path: Path) -> None:
     about = {r[0]: r[1] for r in _rows(wb["About"])}
     assert about["Unique reach (distinct _uuid)"] == 2
     assert about["Copy"] == "clean"
+
+
+def test_5w_xlsx_strips_illegal_characters(tmp_path: Path) -> None:
+    label = "head_sex=fe\x0bmale"
+    table = FiveWTable(
+        columns=["Organization", "Activity", "Beneficiaries", label],
+        rows=[{"Organization": "IMC", "Activity": "cash\x0bhealth", "Beneficiaries": 1, label: 1}],
+        id_field="_uuid",
+        unique_reach=1,
+        rows_without_activity=0,
+    )
+    md, xlsx = _paths(tmp_path, "5w")
+    render_5w(table, SOURCE, None, md, xlsx, GENERATED)
+    assert _rows(openpyxl.load_workbook(xlsx)["5W"]) == [
+        ["Organization", "Activity", "Beneficiaries", "head_sex=female"],
+        ["IMC", "cashhealth", 1, 1],
+    ]
 
 
 def test_5w_empty_table_warns(tmp_path: Path) -> None:

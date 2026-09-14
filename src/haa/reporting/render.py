@@ -7,6 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font
 
 from haa.reporting.engine import ReportRun
@@ -59,11 +60,15 @@ def _md_table(header: list[str], rows: list[list[object]]) -> list[str]:
 def _xl(value: object) -> object:
     if isinstance(value, float):
         return int(value) if value.is_integer() else round(value, 4)
+    if isinstance(value, str):
+        # control characters from the data would make openpyxl refuse the cell
+        return ILLEGAL_CHARACTERS_RE.sub("", value)
     return value
 
 
 def _sheet_title(name: str, taken: set[str]) -> str:
-    base = _INVALID_TITLE.sub("", str(name)).strip()[:31] or "Sheet"
+    clean = ILLEGAL_CHARACTERS_RE.sub("", _INVALID_TITLE.sub("", str(name)))
+    base = clean.strip()[:31] or "Sheet"
     title, n = base, 2
     while title.lower() in {t.lower() for t in taken}:
         suffix = f"_{n}"
@@ -74,7 +79,7 @@ def _sheet_title(name: str, taken: set[str]) -> str:
 
 
 def _write_table(ws, header: list[str], rows: list[list[object]]) -> None:
-    ws.append(header)
+    ws.append([_xl(h) for h in header])
     for cell in ws[ws.max_row]:
         cell.font = Font(bold=True)
     for row in rows:
@@ -162,9 +167,18 @@ def render_indicator_report(
     summary_ws.freeze_panes = "A2"
     about = wb.create_sheet(_sheet_title("About", taken))
     about.append(["Generated", generated.isoformat()])
-    about.append(["Period", period_label(run.period)])
+    about.append(["Period", _xl(period_label(run.period))])
     about.append([None])
     _write_table(about, SOURCE_HEADER, _source_rows(run.sources))
+    breakdown_errors = [
+        [f"Breakdown not computed: {r.code} by {dimension}", reason]
+        for r in run.computed
+        for dimension, reason in r.breakdown_errors.items()
+    ]
+    if breakdown_errors:
+        about.append([None])
+        for row in breakdown_errors:
+            about.append([_xl(v) for v in row])
     by_dimension: dict[str, list[list[object]]] = {}
     for r in run.computed:
         for dimension, rows in r.breakdowns.items():
@@ -239,6 +253,6 @@ def render_5w(
         (f"Unique reach (distinct {table.id_field})", table.unique_reach),
         ("Records without any activity", table.rows_without_activity),
     ]:
-        about.append([label, value])
+        about.append([_xl(label), _xl(value)])
     xlsx_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(xlsx_path)

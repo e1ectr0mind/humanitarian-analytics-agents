@@ -7,7 +7,7 @@ from datetime import date
 from pathlib import Path
 
 from openpyxl import Workbook
-from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE, Cell
 from openpyxl.styles import Font
 
 from haa.reporting.engine import ReportRun
@@ -78,12 +78,34 @@ def _sheet_title(name: str, taken: set[str]) -> str:
     return title
 
 
+def _append_row(ws, values: list[object]) -> None:
+    """Append one row, converting each value for xlsx.
+
+    A string starting with "=" would otherwise be stored as a formula by openpyxl
+    (cell.data_type == "f"); this keeps it as text (data_type "s") instead, since it
+    is category data, not a formula the user asked for. Built as a Cell up front —
+    ws.append() accepts a mix of plain values and Cell objects — rather than fixed up
+    afterwards by scanning the row: ws.max_row/ws[row] cost is proportional to every
+    cell in the sheet so far, which would make writing a wide report O(rows^2).
+    """
+    row: list[object] = []
+    for value in values:
+        value = _xl(value)
+        if isinstance(value, str) and value.startswith("="):
+            cell = Cell(ws, value=value)
+            cell.data_type = "s"
+            row.append(cell)
+        else:
+            row.append(value)
+    ws.append(row)
+
+
 def _write_table(ws, header: list[str], rows: list[list[object]]) -> None:
-    ws.append([_xl(h) for h in header])
+    _append_row(ws, header)
     for cell in ws[ws.max_row]:
         cell.font = Font(bold=True)
     for row in rows:
-        ws.append([_xl(v) for v in row])
+        _append_row(ws, row)
 
 
 def _source_rows(sources: dict[str, SourceInfo]) -> list[list[object]]:
@@ -168,22 +190,22 @@ def render_indicator_report(
     )
     summary_ws.freeze_panes = "A2"
     about = wb.create_sheet(_sheet_title("About", taken))
-    about.append(["Generated", generated.isoformat()])
-    about.append(["Period", _xl(period_label(run.period))])
-    about.append([None])
+    _append_row(about, ["Generated", generated.isoformat()])
+    _append_row(about, ["Period", period_label(run.period)])
+    _append_row(about, [None])
     _write_table(about, SOURCE_HEADER, _source_rows(run.sources))
     for source in run.sources.values():
         if source.stale_warning:
-            about.append([_xl("Warning"), _xl(source.stale_warning)])
+            _append_row(about, ["Warning", source.stale_warning])
     breakdown_errors = [
         [f"Breakdown not computed: {r.code} by {dimension}", reason]
         for r in run.computed
         for dimension, reason in r.breakdown_errors.items()
     ]
     if breakdown_errors:
-        about.append([None])
+        _append_row(about, [None])
         for row in breakdown_errors:
-            about.append([_xl(v) for v in row])
+            _append_row(about, row)
     by_dimension: dict[str, list[list[object]]] = {}
     for r in run.computed:
         for dimension, rows in r.breakdowns.items():
@@ -263,6 +285,6 @@ def render_5w(
     if source.stale_warning:
         about_rows.append(("Warning", source.stale_warning))
     for label, value in about_rows:
-        about.append([_xl(label), _xl(value)])
+        _append_row(about, [label, value])
     xlsx_path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(xlsx_path)

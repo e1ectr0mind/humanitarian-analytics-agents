@@ -208,6 +208,21 @@ def test_indicator_xlsx_strips_illegal_characters(tmp_path: Path) -> None:
     assert _rows(wb["oblast"])[1] == ["1", "Донецькаобл", 1, None]
 
 
+def test_indicator_xlsx_breakdown_category_is_formula_safe(tmp_path: Path) -> None:
+    result = IndicatorResult(
+        code="1", name={"uk": "a", "en": "b"}, dataset="beneficiaries", target=None,
+        unit=None, actual=1.0, progress_pct=None, status="computed",
+        breakdowns={"oblast": [BreakdownRow('=HYPERLINK("http://x","y")', 1.0)]},
+    )
+    run = ReportRun(period=None, sources={"beneficiaries": SOURCE}, results=[result])
+    md, xlsx = _paths(tmp_path, "indicators")
+    render_indicator_report(run, md, xlsx, GENERATED)
+    ws = openpyxl.load_workbook(xlsx)["oblast"]
+    cell = ws.cell(row=2, column=2)
+    assert cell.data_type == "s"
+    assert cell.value == '=HYPERLINK("http://x","y")'
+
+
 def test_sheet_titles_are_sanitized_and_unique(tmp_path: Path) -> None:
     result = RUN.results[0]
     run = ReportRun(
@@ -289,6 +304,22 @@ def test_5w_xlsx_lists_stale_warning_in_about(tmp_path: Path) -> None:
     render_5w(TABLE, STALE_SOURCE, PERIOD, md, xlsx, GENERATED)
     about = {r[0]: r[1] for r in _rows(openpyxl.load_workbook(xlsx)["About"])}
     assert "older than the raw file" in about["Warning"]
+
+
+def test_5w_xlsx_activity_is_formula_safe(tmp_path: Path) -> None:
+    table = FiveWTable(
+        columns=["Organization", "Activity", "Beneficiaries"],
+        rows=[{"Organization": "IMC", "Activity": "=1+1", "Beneficiaries": 1}],
+        id_field="_uuid",
+        unique_reach=1,
+        rows_without_activity=0,
+    )
+    md, xlsx = _paths(tmp_path, "5w")
+    render_5w(table, SOURCE, None, md, xlsx, GENERATED)
+    ws = openpyxl.load_workbook(xlsx)["5W"]
+    cell = ws.cell(row=2, column=2)
+    assert cell.data_type == "s"
+    assert cell.value == "=1+1"
 
 
 def test_5w_empty_table_warns(tmp_path: Path) -> None:

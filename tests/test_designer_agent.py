@@ -52,5 +52,9 @@ def test_designer_prompt_carries_registry_schema() -> None:
         "source: beneficiaries",
         "count | count_unique | sum | percent",
         "numerator",
+        "numerator: {field: _uuid,",
+        "count distinct non-null values of their `field`",
+        "must be real column names from profile_dataset",
     ):
         assert needle in DESIGNER_PROMPT, needle
+    assert "numerator: {field: head_sex" not in DESIGNER_PROMPT

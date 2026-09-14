@@ -27,6 +27,11 @@ Indicators registry:
   with profile_dataset first. Never fabricate a column name.
 - Never point `measure.field` at a column the profile marks as PII — the
   analyst cannot read those.
+- In a `percent` measure, the numerator and denominator each
+  count distinct non-null values of their `field` after their own filter,
+  so use the unit ID column (e.g. `_uuid`) there.
+- `disaggregation` entries must be real column names from profile_dataset — the
+  report engine breaks down by those columns.
 - Save with save_indicators; fix every reported validation error and retry.
 - Registry YAML schema — use exactly these keys, no others:
 
@@ -45,7 +50,7 @@ Indicators registry:
           field: _uuid     # for count_unique / sum
           filter: null     # optional pandas query
           # percent instead takes two sub-blocks, each {field, filter}:
-          # numerator: {field: head_sex, filter: "head_sex == 'female'"}
+          # numerator: {field: _uuid, filter: "head_sex == 'female'"}
           # denominator: {field: _uuid, filter: null}
 
 Form design:

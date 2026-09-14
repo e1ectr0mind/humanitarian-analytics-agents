@@ -234,20 +234,13 @@ async def test_designer_produces_compiling_form(demo_workspace: Path) -> None:
     assert tokens & sadd_tokens, f"no sex/gender question found: {question_names}"
 
 
-async def test_reporter_builds_indicator_report(demo_workspace: Path) -> None:
+async def test_reporter_builds_indicator_report(report_workspace: Path) -> None:
     import time
     from datetime import date
 
     import openpyxl
-    import yaml
 
-    from haa.indicators.registry import registry_path
-    from tests.conftest import DEMO_REGISTRY
-
-    cfg = load_config(demo_workspace)
-    registry_path(cfg.workspace).write_text(
-        yaml.safe_dump(DEMO_REGISTRY, allow_unicode=True, sort_keys=False), encoding="utf-8"
-    )
+    cfg = load_config(report_workspace)
     started = time.time()
     async with AnalyticsSession(cfg) as session:
         async for _ in session.ask("Зроби звіт про прогрес за індикаторами проєкту."):
@@ -274,16 +267,15 @@ async def test_reporter_builds_indicator_report(demo_workspace: Path) -> None:
     assert "mcp__data__run_analysis" not in log_text, "report numbers must come from the engine"
 
 
-async def test_reporter_proposes_mapping_and_builds_5w(demo_workspace: Path) -> None:
+async def test_reporter_proposes_mapping_and_builds_5w(report_workspace: Path) -> None:
     import time
     from datetime import date
 
     import openpyxl
 
-    from haa.reporting.mapping import load_mapping, mapping_path, validate_mapping
+    from haa.reporting.mapping import load_mapping, validate_mapping
 
-    cfg = load_config(demo_workspace)
-    mapping_path(cfg.workspace).unlink(missing_ok=True)
+    cfg = load_config(report_workspace)
     started = time.time()
     async with AnalyticsSession(cfg) as session:
         async for _ in session.ask("Зроби 5W-матрицю за даними beneficiaries."):

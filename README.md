@@ -87,6 +87,25 @@ pyxform before it is saved). Upload the .xlsx to Kobo or Ona yourself — this
 tool does not deploy forms. Editing works the same way: *"make the phone
 question optional in pdm"* re-renders the workbook from the updated model.
 
+## Reports
+
+Ask: *"Build the indicator progress report"* — the reporter agent runs a
+deterministic engine over every indicator in `workspace/indicators.yaml` that
+has a `measure` block and writes `workspace/reports/indicators_<date>.md` and
+`.xlsx`: target, actual, % progress, and a breakdown per disaggregation column.
+Indicators it cannot compute are listed with the reason — nothing is estimated.
+
+Ask: *"Make a 5W matrix"* — the reporter proposes `workspace/5w.yaml` (which
+columns are Where, When, What and Whom) from the dataset profile, then writes
+`workspace/reports/5w_<date>.md` and `.xlsx`. Edit `5w.yaml` by hand and rebuild
+any time.
+
+Both reports prefer `<dataset>_clean.xlsx` when the cleaner has produced one,
+take an optional reporting period, and also run without the LLM (no API key):
+
+    uv run haa report indicators --period 2026-06-01..2026-08-31 --date-field submission_date
+    uv run haa report 5w --period 2026-06-01..2026-08-31
+
 ## Architecture
 
     CLI (rich REPL)
@@ -117,6 +136,6 @@ tests on every push.
 
 ## Roadmap
 
-**Completed:** Core + analyst agent, connectors/cleaner, indicator registry + XLSForm designer, SharePoint connector.
-**Remaining:** reporting agent (5W/MEAL), Power BI engineer, web UI. Design docs live
+**Completed:** Core + analyst agent, connectors/cleaner, indicator registry + XLSForm designer, SharePoint connector, deterministic reports (indicator progress, 5W).
+**Remaining:** narrative reports (donor narrative, dataset summary as docx), Power BI engineer, web UI. Design docs live
 in `docs/superpowers/specs/`.

@@ -1,4 +1,5 @@
 import copy
+import re
 from datetime import date
 from pathlib import Path
 
@@ -68,9 +69,42 @@ def test_compute_indicators_hides_high_cardinality_breakdowns(
     for value in raw["_uuid"].dropna().astype(str):
         assert value not in out
     categories = raw["_uuid"].nunique() + int(raw["_uuid"].isna().any())
-    assert f"by _uuid: {categories} categories — too many to list here; see the report file" in out
+    assert (
+        f"by _uuid: {categories} categories — values not shown here "
+        "(too many distinct values in the dataset); see the report file"
+    ) in out
     oblast_line = next(line for line in out.splitlines() if "by oblast:" in line)
     for value in raw["oblast"].dropna().unique():
+        assert str(value) in oblast_line
+
+
+def test_compute_indicators_full_dataset_rule_applies_even_with_narrow_period(
+    box: ReportToolbox, report_workspace: Path
+) -> None:
+    """A short period can leave <= 30 _uuid rows, but the dataset overall has 3000 —
+    the rule looks at the full dataset, not the in-scope row count."""
+    registry = copy.deepcopy(DEMO_REGISTRY)
+    registry["indicators"][0]["disaggregation"] = ["_uuid", "oblast"]
+    (report_workspace / "indicators.yaml").write_text(
+        yaml.safe_dump(registry, allow_unicode=True, sort_keys=False), encoding="utf-8"
+    )
+    raw = pd.read_excel(report_workspace / "data" / "beneficiaries.xlsx")
+    counts = raw["submission_date"].value_counts()
+    narrow_days = counts[(counts <= 30) & (counts.index != "2027-01-15")]
+    assert not narrow_days.empty
+    day = str(narrow_days.index[0])
+
+    out = box.compute_indicators("submission_date", day, day)
+    in_scope = raw.loc[raw["submission_date"] == day]
+    for value in in_scope["_uuid"].dropna().astype(str):
+        assert value not in out
+    uuid_line = next(line for line in out.splitlines() if "by _uuid:" in line)
+    assert (
+        "categories — values not shown here (too many distinct values in the dataset); "
+        "see the report file"
+    ) in uuid_line
+    oblast_line = next(line for line in out.splitlines() if "by oblast:" in line)
+    for value in in_scope["oblast"].dropna().unique():
         assert str(value) in oblast_line
 
 
@@ -182,6 +216,29 @@ def test_build_5w_writes_files_and_logs(box: ReportToolbox) -> None:
 def test_build_5w_period_defaults_to_when_field(box: ReportToolbox) -> None:
     box.save_5w_mapping(MAPPING_YAML)
     assert "by submission_date" in box.build_5w(None, "2026-06-01", "2026-08-31")
+
+
+def test_build_5w_keeps_labels_for_listable_disaggregation(box: ReportToolbox) -> None:
+    box.save_5w_mapping(MAPPING_YAML)  # whom.disaggregation: [head_sex]
+    out = box.build_5w()
+    columns_line = next(line for line in out.splitlines() if line.startswith("5W built:"))
+    assert "head_sex=female" in columns_line
+    assert "head_sex=male" in columns_line
+
+
+def test_build_5w_collapses_labels_for_non_listable_disaggregation(
+    box: ReportToolbox, report_workspace: Path
+) -> None:
+    mapping = copy.deepcopy(VALID_MAPPING)
+    mapping["whom"]["disaggregation"] = ["_uuid"]
+    box.save_5w_mapping(yaml.safe_dump(mapping, allow_unicode=True, sort_keys=False))
+    raw = pd.read_excel(report_workspace / "data" / "beneficiaries.xlsx")
+    out = box.build_5w()
+    for value in raw["_uuid"].dropna().astype(str):
+        assert value not in out
+    columns_line = next(line for line in out.splitlines() if line.startswith("5W built:"))
+    match = re.search(r"_uuid=(\d+) categories", columns_line)
+    assert match is not None and int(match.group(1)) > 0
 
 
 def test_tool_outputs_never_contain_pii(box: ReportToolbox, report_workspace: Path) -> None:

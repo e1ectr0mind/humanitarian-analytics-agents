@@ -9,7 +9,6 @@ import yaml
 
 from haa.config import HaaConfig
 from haa.core.telemetry import SessionTelemetry
-from haa.core.tools.profiler import MAX_CATEGORY_VALUES
 from haa.indicators.registry import RegistryError, load_registry
 from haa.reporting import fivew
 from haa.reporting.engine import ReportRun, evaluate_registry
@@ -62,6 +61,31 @@ def _name(names: dict) -> str:
     return " / ".join(part for part in (names.get("uk"), names.get("en")) if part)
 
 
+def _five_w_display_columns(
+    columns: list[str], dimensions: list[str], listable: frozenset[str]
+) -> list[str]:
+    """`table.columns` for display: `<dimension>=<category>` labels of a dimension the
+    profiler would not list are collapsed into one `<dimension>=<N categories>` token.
+    """
+    prefixes = {f"{dimension}=": dimension for dimension in dimensions if dimension not in listable}
+    counts: dict[str, int] = {}
+    for column in columns:
+        for prefix, dimension in prefixes.items():
+            if column.startswith(prefix):
+                counts[dimension] = counts.get(dimension, 0) + 1
+                break
+    display: list[str] = []
+    collapsed: set[str] = set()
+    for column in columns:
+        dimension = next((d for p, d in prefixes.items() if column.startswith(p)), None)
+        if dimension is None:
+            display.append(column)
+        elif dimension not in collapsed:
+            display.append(f"{dimension}={counts[dimension]} categories")
+            collapsed.add(dimension)
+    return display
+
+
 def run_summary(run: ReportRun) -> str:
     """Plain-text digest of a report run: aggregates only, never rows."""
     lines = [f"Period: {period_label(run.period)}"]
@@ -84,13 +108,15 @@ def run_summary(run: ReportRun) -> str:
             f"- {r.code} {_name(r.name)}: actual {format_value(r.actual, r.unit)}"
             f"{target}{progress}"
         )
+        result_source = run.sources.get(r.dataset)
+        listable = result_source.listable_columns if result_source is not None else frozenset()
         for dimension, rows in r.breakdowns.items():
             # Same rule as profile_dataset: category values of a high-cardinality
             # column (IDs, dates, free text) never reach the LLM.
-            if len(rows) > MAX_CATEGORY_VALUES:
+            if dimension not in listable:
                 lines.append(
-                    f"    by {dimension}: {len(rows)} categories — too many to list here; "
-                    "see the report file"
+                    f"    by {dimension}: {len(rows)} categories — values not shown here "
+                    "(too many distinct values in the dataset); see the report file"
                 )
                 continue
             parts = [
@@ -233,8 +259,12 @@ class ReportToolbox:
             paths=[md_path.name, xlsx_path.name],
         )
         copy = "clean" if source.used_clean else "raw"
+        dimensions = list(mapping["whom"].get("disaggregation") or [])
+        display_columns = _five_w_display_columns(
+            table.columns, dimensions, source.listable_columns
+        )
         return (
-            f"5W built: {len(table.rows)} rows; columns: {', '.join(table.columns)}.\n"
+            f"5W built: {len(table.rows)} rows; columns: {', '.join(display_columns)}.\n"
             f"Unique reach (distinct {table.id_field}): {table.unique_reach}; "
             f"records without any activity: {table.rows_without_activity}.\n"
             f"Period: {period_label(period)}; source {source.path.name} ({copy} copy), "

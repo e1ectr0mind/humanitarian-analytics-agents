@@ -4,8 +4,10 @@ from pathlib import Path
 import pandas as pd
 
 from haa.core.tools.profiler import (
+    MAX_CATEGORY_VALUES,
     detect_pii_columns,
     discover_datasets,
+    listable_columns,
     profile_dataframe,
 )
 
@@ -59,3 +61,20 @@ def test_profile_shape_and_no_pii_values(demo_workspace: Path) -> None:
 def test_profile_is_json_serializable(demo_workspace: Path) -> None:
     df = _df(demo_workspace)
     json.dumps(profile_dataframe(df, "x", detect_pii_columns(df)), ensure_ascii=False)
+
+
+def test_listable_columns_demo(demo_workspace: Path) -> None:
+    df = _df(demo_workspace)
+    pii = detect_pii_columns(df)
+    listable = listable_columns(df, pii)
+    assert "oblast" in listable
+    assert "_uuid" not in listable
+    assert not (set(pii) & listable)
+
+
+def test_listable_columns_boundary_is_inclusive() -> None:
+    n = MAX_CATEGORY_VALUES + 1
+    df = pd.DataFrame({"a": [*range(MAX_CATEGORY_VALUES), 0], "b": range(n)})
+    listable = listable_columns(df, [])
+    assert "a" in listable
+    assert "b" not in listable

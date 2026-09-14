@@ -113,6 +113,19 @@ def test_load_scoped_demo_detects_pii_and_counts(demo_workspace: Path) -> None:
     assert len(df) == len(raw)
 
 
+def test_load_scoped_listable_columns_from_full_dataset(demo_workspace: Path) -> None:
+    _, info, pii = load_scoped(demo_workspace / "data", "beneficiaries", None)
+    assert "_uuid" not in info.listable_columns
+    assert "oblast" in info.listable_columns
+    pii_columns = {"resp_name", "resp_phone", "gps_lat", "gps_lon", "enumerator", "comment"}
+    assert pii_columns <= set(pii)
+    assert not (pii_columns & info.listable_columns)
+
+    period = Period("submission_date", date(2026, 7, 3), date(2026, 7, 3))
+    _, narrow_info, _ = load_scoped(demo_workspace / "data", "beneficiaries", period)
+    assert narrow_info.listable_columns == info.listable_columns
+
+
 def test_load_scoped_read_error_text_is_not_echoed(tmp_path: Path, monkeypatch) -> None:
     _write_csv(tmp_path / "hh.csv", {"id": ["a"]})
 

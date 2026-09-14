@@ -53,8 +53,23 @@ def detect_pii_columns(df: pd.DataFrame) -> list[str]:
     return pii
 
 
+def listable_columns(df: pd.DataFrame, pii_columns: list[str]) -> frozenset[str]:
+    """Columns whose category values may reach the LLM.
+
+    Not PII, and at most MAX_CATEGORY_VALUES distinct non-null values — the same
+    rule profile_dataframe uses to decide whether to list a column's `values`.
+    """
+    pii = set(pii_columns)
+    return frozenset(
+        col
+        for col in df.columns
+        if col not in pii and df[col].dropna().nunique() <= MAX_CATEGORY_VALUES
+    )
+
+
 def profile_dataframe(df: pd.DataFrame, name: str, pii_columns: list[str]) -> dict:
     pii = set(pii_columns)
+    listable = listable_columns(df, pii_columns)
     columns: list[dict] = []
     for col in df.columns:
         series = df[col]
@@ -66,7 +81,7 @@ def profile_dataframe(df: pd.DataFrame, name: str, pii_columns: list[str]) -> di
         }
         if col not in pii:
             non_null = series.dropna()
-            if non_null.nunique() <= MAX_CATEGORY_VALUES:
+            if col in listable:
                 info["values"] = sorted(str(v) for v in non_null.unique())
             elif pd.api.types.is_numeric_dtype(series):
                 info["min"] = float(non_null.min()) if len(non_null) else None

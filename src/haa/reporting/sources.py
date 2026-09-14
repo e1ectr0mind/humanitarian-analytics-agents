@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 
-from haa.core.tools.profiler import detect_pii_columns, discover_datasets
+from haa.core.tools.profiler import detect_pii_columns, discover_datasets, listable_columns
 
 
 class ReportError(ValueError):
@@ -38,6 +38,7 @@ class SourceInfo:
     rows_in_scope: int
     rows_excluded_by_period: int
     rows_bad_date: int
+    listable_columns: frozenset[str] = field(default_factory=frozenset)
 
 
 def parse_period(date_field: str | None, start: str | None, end: str | None) -> Period | None:
@@ -100,6 +101,7 @@ def load_scoped(
         ) from exc
     pii = detect_pii_columns(df)
     total = len(df)
+    listable = listable_columns(df, pii)
     bad_dates = 0
     if period is not None:
         if period.field not in df.columns:
@@ -127,5 +129,6 @@ def load_scoped(
         rows_in_scope=len(df),
         rows_excluded_by_period=total - len(df),
         rows_bad_date=bad_dates,
+        listable_columns=listable,
     )
     return df, info, pii

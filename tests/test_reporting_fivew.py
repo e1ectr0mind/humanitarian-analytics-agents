@@ -100,6 +100,45 @@ def test_pii_column_refused() -> None:
         build_5w(DF, mapping, PII)
 
 
+def test_multiple_bad_columns_raise_one_error() -> None:
+    mapping = copy.deepcopy(MAPPING)
+    mapping["where"] = ["foo"]
+    mapping["whom"]["disaggregation"] = ["resp_phone"]
+    with pytest.raises(ReportError) as excinfo:
+        build_5w(DF, mapping, PII)
+    message = str(excinfo.value)
+    assert "'foo'" in message
+    assert "'resp_phone'" in message
+    assert "personal data" in message and "pick another column" in message
+    assert message.index("personal data") < message.index("pick another column")
+    assert "profile_dataset" in message
+
+
+def test_missing_sorts_last_for_where_and_period() -> None:
+    df = pd.DataFrame(
+        {
+            "_uuid": ["a", "b", "c", "d", "e"],
+            "oblast": ["B", "A", None, "A", "B"],
+            "submission_date": [
+                "2026-07-01", "2026-06-01", "2026-06-01", "bad-date", "2026-06-01",
+            ],
+            "services_received": ["cash"] * 5,
+            "head_sex": ["female"] * 5,
+            "resp_phone": ["1", "2", "3", "4", "5"],
+        }
+    )
+    mapping = copy.deepcopy(MAPPING)
+    del mapping["whom"]["disaggregation"]
+    table = build_5w(df, mapping, PII)
+    assert [(r["oblast"], r["Period"]) for r in table.rows] == [
+        ("A", "2026-06"),
+        ("A", MISSING),
+        ("B", "2026-06"),
+        ("B", "2026-07"),
+        (MISSING, "2026-06"),
+    ]
+
+
 def test_empty_frame() -> None:
     table = build_5w(DF.iloc[0:0], MAPPING, PII)
     assert table.rows == [] and table.unique_reach == 0

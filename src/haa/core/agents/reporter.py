@@ -51,7 +51,8 @@ Indicator progress report:
     what: {field: services_received, split: " "}         # split is optional
     whom:
       id_field: _uuid                  # unique beneficiary / household ID
-      disaggregation: [head_sex]       # optional SADD columns
+      disaggregation: [head_sex]       # optional; low-cardinality SADD columns only
+                                       # (sex, age group: at most 30 distinct values)
 
 Clean-copy freshness:
 - If a tool result carries a clean-copy warning (the clean copy is older than the raw

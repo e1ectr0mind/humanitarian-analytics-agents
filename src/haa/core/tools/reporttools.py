@@ -61,31 +61,6 @@ def _name(names: dict) -> str:
     return " / ".join(part for part in (names.get("uk"), names.get("en")) if part)
 
 
-def _five_w_display_columns(
-    columns: list[str], dimensions: list[str], listable: frozenset[str]
-) -> list[str]:
-    """`table.columns` for display: `<dimension>=<category>` labels of a dimension the
-    profiler would not list are collapsed into one `<dimension>=<N categories>` token.
-    """
-    prefixes = {f"{dimension}=": dimension for dimension in dimensions if dimension not in listable}
-    counts: dict[str, int] = {}
-    for column in columns:
-        for prefix, dimension in prefixes.items():
-            if column.startswith(prefix):
-                counts[dimension] = counts.get(dimension, 0) + 1
-                break
-    display: list[str] = []
-    collapsed: set[str] = set()
-    for column in columns:
-        dimension = next((d for p, d in prefixes.items() if column.startswith(p)), None)
-        if dimension is None:
-            display.append(column)
-        elif dimension not in collapsed:
-            display.append(f"{dimension}={counts[dimension]} categories")
-            collapsed.add(dimension)
-    return display
-
-
 def run_summary(run: ReportRun) -> str:
     """Plain-text digest of a report run: aggregates only, never rows."""
     lines = [f"Period: {period_label(run.period)}"]
@@ -258,7 +233,9 @@ class ReportToolbox:
                 return False, text
             period = parse_period(date_field or mapping["when"]["field"], start, end)
             df, source, pii = load_scoped(self.config.data_dir, mapping["dataset"], period)
-            table = fivew.build_5w(df, mapping, pii)
+            # Disaggregation dimensions must be listable (<= 30 values in the full
+            # dataset), so the column labels below never carry an ID-like column's values.
+            table = fivew.build_5w(df, mapping, pii, source.listable_columns)
         except ReportError as exc:
             return False, str(exc)
         today = self._today()
@@ -274,13 +251,9 @@ class ReportToolbox:
             unique_reach=table.unique_reach,
             paths=[md_path.name, xlsx_path.name],
         )
-        dimensions = list(mapping["whom"].get("disaggregation") or [])
-        display_columns = _five_w_display_columns(
-            table.columns, dimensions, source.listable_columns
-        )
         bad_date = f", {source.rows_bad_date} without a valid date" if period is not None else ""
         lines = [
-            f"5W built: {len(table.rows)} rows; columns: {', '.join(display_columns)}.",
+            f"5W built: {len(table.rows)} rows; columns: {', '.join(table.columns)}.",
             f"Unique reach (distinct {table.id_field}): {table.unique_reach}; "
             f"records without any activity: {table.rows_without_activity}.",
             f"Period: {period_label(period)}; source {source.path.name} "

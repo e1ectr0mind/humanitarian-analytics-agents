@@ -46,5 +46,6 @@ def test_reporter_prompt_carries_5w_schema() -> None:
     for needle in (
         "exactly these keys", "fixed:", "where: [oblast, raion, hromada]",
         "granularity: month", "month | none", 'split: " "', "id_field: _uuid",
+        "low-cardinality SADD columns only", "at most 30 distinct values",
     ):
         assert needle in REPORTER_PROMPT, needle

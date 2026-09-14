@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from haa.core.tools.profiler import MAX_CATEGORY_VALUES
 from haa.reporting.measures import MISSING, category_keys, ordered_categories
 from haa.reporting.sources import ReportError, check_not_numeric_date, parse_dates
 
@@ -34,9 +35,12 @@ def _plain(value: object) -> object:
     return value.item() if hasattr(value, "item") else value
 
 
-def _unusable_columns_error(pii_columns: list[str], missing_columns: list[str]) -> str:
+def _unusable_columns_error(
+    pii_columns: list[str], missing_columns: list[str], crowded_columns: list[str]
+) -> str:
     reasons = [f"{c!r} (looks like personal data)" for c in pii_columns]
     reasons += [f"{c!r} (not in the dataset)" for c in missing_columns]
+    reasons += [f"{c!r} (too many distinct values to disaggregate by)" for c in crowded_columns]
     fixes = []
     if pii_columns:
         fixes.append(
@@ -45,6 +49,11 @@ def _unusable_columns_error(pii_columns: list[str], missing_columns: list[str]) 
         )
     if missing_columns:
         fixes.append("check profile_dataset for column names")
+    if crowded_columns:
+        fixes.append(
+            "disaggregate only by low-cardinality columns such as sex or age group "
+            f"(at most {MAX_CATEGORY_VALUES} distinct values)"
+        )
     return (
         "5w.yaml uses columns a report cannot use: "
         + ", ".join(reasons)
@@ -59,8 +68,15 @@ def _missing_last(series: pd.Series) -> pd.Series:
     return series.map(lambda value: (value == MISSING, value))
 
 
-def build_5w(df: pd.DataFrame, mapping: dict, pii: list[str]) -> FiveWTable:
-    """Group rows into 5W lines counting distinct beneficiaries per activity."""
+def build_5w(
+    df: pd.DataFrame, mapping: dict, pii: list[str], listable: frozenset[str]
+) -> FiveWTable:
+    """Group rows into 5W lines counting distinct beneficiaries per activity.
+
+    `listable` holds the columns with few enough distinct values in the full dataset
+    (`SourceInfo.listable_columns`); only those may be disaggregation dimensions — an
+    ID-like dimension would pivot into rows x distinct-values cells and exhaust memory.
+    """
     where = list(mapping["where"])
     when = mapping["when"]
     what = mapping["what"]
@@ -77,8 +93,15 @@ def build_5w(df: pd.DataFrame, mapping: dict, pii: list[str]) -> FiveWTable:
                 pii_columns.append(column)
         elif column not in df.columns and column not in missing_columns:
             missing_columns.append(column)
-    if pii_columns or missing_columns:
-        raise ReportError(_unusable_columns_error(pii_columns, missing_columns))
+    crowded_columns: list[str] = []
+    for column in dimensions:
+        usable = column not in pii_columns and column not in missing_columns
+        if usable and column not in listable and column not in crowded_columns:
+            crowded_columns.append(column)
+    if pii_columns or missing_columns or crowded_columns:
+        raise ReportError(
+            _unusable_columns_error(pii_columns, missing_columns, crowded_columns)
+        )
 
     work = pd.DataFrame(index=df.index)
     for column in where:

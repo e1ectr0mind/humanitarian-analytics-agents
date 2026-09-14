@@ -1,6 +1,5 @@
 import copy
 import os
-import re
 import time
 from datetime import date
 from pathlib import Path
@@ -283,19 +282,37 @@ def test_build_5w_numeric_when_field_is_a_friendly_error(box: ReportToolbox) -> 
     assert "Traceback" not in out
 
 
-def test_build_5w_collapses_labels_for_non_listable_disaggregation(
+def test_build_5w_refuses_high_cardinality_disaggregation(
     box: ReportToolbox, report_workspace: Path
 ) -> None:
+    """An ID-like disaggregation column would pivot into N x N cells (hours, gigabytes);
+    it is refused before any table is built. A small dataset keeps this test fast."""
+    n = 40
+    ids = [f"hh-{i:03d}" for i in range(n)]
+    pd.DataFrame(
+        {
+            "_uuid": ids,
+            "oblast": ["A"] * n,
+            "raion": ["B"] * n,
+            "hromada": ["C"] * n,
+            "submission_date": ["2026-06-01"] * n,
+            "services_received": ["cash"] * n,
+            "head_sex": ["female"] * n,
+        }
+    ).to_csv(report_workspace / "data" / "small.csv", index=False)
     mapping = copy.deepcopy(VALID_MAPPING)
-    mapping["whom"]["disaggregation"] = ["_uuid"]
+    mapping["dataset"] = "small"
+    mapping["whom"]["disaggregation"] = ["head_sex", "_uuid"]
     box.save_5w_mapping(yaml.safe_dump(mapping, allow_unicode=True, sort_keys=False))
-    raw = pd.read_excel(report_workspace / "data" / "beneficiaries.xlsx")
     out = box.build_5w()
-    for value in raw["_uuid"].dropna().astype(str):
-        assert value not in out
-    columns_line = next(line for line in out.splitlines() if line.startswith("5W built:"))
-    match = re.search(r"_uuid=(\d+) categories", columns_line)
-    assert match is not None and int(match.group(1)) > 0
+    assert out == (
+        "5w.yaml uses columns a report cannot use: '_uuid' (too many distinct values to "
+        "disaggregate by) — fix 5w.yaml: disaggregate only by low-cardinality columns such "
+        "as sex or age group (at most 30 distinct values)."
+    )
+    assert not any(value in out for value in ids)
+    assert not list(box.config.reports_dir.iterdir())
+    assert '"report_built"' not in _log(box)
 
 
 def test_build_indicator_report_and_5w_prefer_clean_copy(

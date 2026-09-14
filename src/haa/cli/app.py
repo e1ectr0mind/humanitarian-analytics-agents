@@ -68,7 +68,9 @@ def run_pull(workspace: Path, profile: str, form: str) -> str:
     return SourceToolbox(cfg, telemetry).pull_form(profile, form)
 
 
-def run_report(workspace: Path, kind: str, period: str | None, date_field: str | None) -> str:
+def run_report(
+    workspace: Path, kind: str, period: str | None, date_field: str | None
+) -> tuple[str, bool]:
     from datetime import UTC, datetime
 
     from haa.core.telemetry import SessionTelemetry
@@ -77,17 +79,19 @@ def run_report(workspace: Path, kind: str, period: str | None, date_field: str |
     start = end = None
     if period:
         if ".." not in period:
-            return "Use --period START..END, for example 2026-06-01..2026-08-31."
+            return "Use --period START..END, for example 2026-06-01..2026-08-31.", False
         start, end = (part.strip() for part in period.split("..", 1))
     try:
         cfg = load_config(workspace)
     except ConfigError as exc:
-        return str(exc)
+        return str(exc), False
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     box = ReportToolbox(cfg, SessionTelemetry(cfg.logs_dir / f"cli-report-{stamp}.jsonl"))
     if kind == "indicators":
-        return box.build_indicator_report(date_field, start, end)
-    return box.build_5w(date_field, start, end)
+        ok, text = box._build_indicator_report(date_field, start, end)
+    else:
+        ok, text = box._build_5w(date_field, start, end)
+    return text, ok
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -237,12 +241,9 @@ def main() -> int:
         return 0
 
     if args.command == "report":
-        console.print(
-            run_report(args.workspace, args.kind, args.period, args.date_field),
-            markup=False,
-            highlight=False,
-        )
-        return 0
+        text, ok = run_report(args.workspace, args.kind, args.period, args.date_field)
+        console.print(text, markup=False, highlight=False)
+        return 0 if ok else 1
 
     if args.command == "demo":
         from haa.demo import generate

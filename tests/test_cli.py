@@ -136,23 +136,30 @@ def test_parser_report() -> None:
 
 
 def test_run_report_indicators(report_workspace: Path) -> None:
-    out = run_report(report_workspace, "indicators", None, None)
+    out, ok = run_report(report_workspace, "indicators", None, None)
+    assert ok is True
     assert "1.1" in out and "Report files:" in out
     assert list((report_workspace / "reports").glob("indicators_*.xlsx"))
 
 
 def test_run_report_with_period(report_workspace: Path) -> None:
-    out = run_report(report_workspace, "indicators", "2026-06-01..2026-08-31", "submission_date")
+    out, ok = run_report(
+        report_workspace, "indicators", "2026-06-01..2026-08-31", "submission_date"
+    )
+    assert ok is True
     assert "2026-06-01 .. 2026-08-31 (by submission_date)" in out
 
 
 def test_run_report_bad_period_format(report_workspace: Path) -> None:
-    out = run_report(report_workspace, "indicators", "2026-06-01", "submission_date")
+    out, ok = run_report(report_workspace, "indicators", "2026-06-01", "submission_date")
+    assert ok is False
     assert "START..END" in out
 
 
 def test_run_report_5w_without_mapping(report_workspace: Path) -> None:
-    assert "no 5W mapping yet" in run_report(report_workspace, "5w", None, None)
+    out, ok = run_report(report_workspace, "5w", None, None)
+    assert ok is False
+    assert "no 5W mapping yet" in out
 
 
 def test_run_report_5w_with_mapping(report_workspace: Path) -> None:
@@ -160,13 +167,16 @@ def test_run_report_5w_with_mapping(report_workspace: Path) -> None:
     from tests.test_reporting_mapping import VALID_MAPPING
 
     save_mapping(report_workspace, VALID_MAPPING)
-    out = run_report(report_workspace, "5w", None, None)
+    out, ok = run_report(report_workspace, "5w", None, None)
+    assert ok is True
     assert "Unique reach (distinct _uuid): 3000" in out
     assert list((report_workspace / "reports").glob("5w_*.xlsx"))
 
 
 def test_run_report_missing_workspace(tmp_path: Path) -> None:
-    assert "does not exist" in run_report(tmp_path / "nope", "indicators", None, None)
+    out, ok = run_report(tmp_path / "nope", "indicators", None, None)
+    assert ok is False
+    assert "does not exist" in out
 
 
 def test_main_report_prints_summary(report_workspace: Path, monkeypatch, capsys) -> None:
@@ -177,3 +187,13 @@ def test_main_report_prints_summary(report_workspace: Path, monkeypatch, capsys)
     )
     assert app.main() == 0
     assert "Report files:" in capsys.readouterr().out
+
+
+def test_main_report_exits_1_on_failure(report_workspace: Path, monkeypatch, capsys) -> None:
+    import haa.cli.app as app
+
+    monkeypatch.setattr(
+        "sys.argv", ["haa", "report", "5w", "--workspace", str(report_workspace)]
+    )
+    assert app.main() == 1
+    assert "no 5W mapping yet" in capsys.readouterr().out

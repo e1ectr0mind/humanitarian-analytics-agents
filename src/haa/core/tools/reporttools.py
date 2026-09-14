@@ -171,19 +171,19 @@ class ReportToolbox:
             return str(exc)
         return run_summary(run)
 
-    def build_indicator_report(
+    def _build_indicator_report(
         self, date_field: str | None = None, start: str | None = None, end: str | None = None
-    ) -> str:
+    ) -> tuple[bool, str]:
         try:
             run = self._run(date_field, start, end)
         except ReportError as exc:
-            return str(exc)
+            return False, str(exc)
         today = self._today()
         md_path, xlsx_path = report_paths(self.config.reports_dir, "indicators", today)
         try:
             render_indicator_report(run, md_path, xlsx_path, today)
         except OSError as exc:
-            return _WRITE_FAILED.format(detail=exc.strerror or exc)
+            return False, _WRITE_FAILED.format(detail=exc.strerror or exc)
         self.telemetry.log(
             "report_built",
             report="indicators",
@@ -192,10 +192,16 @@ class ReportToolbox:
             rows=sum(s.rows_in_scope for s in run.sources.values()),
             paths=[md_path.name, xlsx_path.name],
         )
-        return (
+        return True, (
             f"{run_summary(run)}\n"
             f"Report files: reports/{md_path.name}, reports/{xlsx_path.name}"
         )
+
+    def build_indicator_report(
+        self, date_field: str | None = None, start: str | None = None, end: str | None = None
+    ) -> str:
+        _, text = self._build_indicator_report(date_field, start, end)
+        return text
 
     # -- 5W ---------------------------------------------------------------
     def read_5w_mapping(self) -> str:
@@ -234,32 +240,33 @@ class ReportToolbox:
             f"where = {', '.join(mapping['where'])}. Build the table with build_5w."
         )
 
-    def build_5w(
+    def _build_5w(
         self, date_field: str | None = None, start: str | None = None, end: str | None = None
-    ) -> str:
+    ) -> tuple[bool, str]:
         try:
             mapping = load_mapping(self.config.workspace)
             if mapping is None:
-                return (
+                return False, (
                     "There is no 5W mapping yet (workspace/5w.yaml) — ask the reporter "
                     "to propose one."
                 )
             errors = validate_mapping(mapping)
             if errors:
-                return "5w.yaml is invalid — fix it by hand or save a corrected mapping:\n" + (
+                text = "5w.yaml is invalid — fix it by hand or save a corrected mapping:\n" + (
                     "\n".join(f"- {e}" for e in errors)
                 )
+                return False, text
             period = parse_period(date_field or mapping["when"]["field"], start, end)
             df, source, pii = load_scoped(self.config.data_dir, mapping["dataset"], period)
             table = fivew.build_5w(df, mapping, pii)
         except ReportError as exc:
-            return str(exc)
+            return False, str(exc)
         today = self._today()
         md_path, xlsx_path = report_paths(self.config.reports_dir, "5w", today)
         try:
             render_5w(table, source, period, md_path, xlsx_path, today)
         except OSError as exc:
-            return _WRITE_FAILED.format(detail=exc.strerror or exc)
+            return False, _WRITE_FAILED.format(detail=exc.strerror or exc)
         self.telemetry.log(
             "report_built",
             report="5w",
@@ -284,7 +291,13 @@ class ReportToolbox:
         if source.stale_warning:
             lines.append(f"Warning: {source.stale_warning}")
         lines.append(f"Report files: reports/{md_path.name}, reports/{xlsx_path.name}")
-        return "\n".join(lines)
+        return True, "\n".join(lines)
+
+    def build_5w(
+        self, date_field: str | None = None, start: str | None = None, end: str | None = None
+    ) -> str:
+        _, text = self._build_5w(date_field, start, end)
+        return text
 
 
 def build_reports_server(box: ReportToolbox):
